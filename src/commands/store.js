@@ -98,6 +98,33 @@ export class VariableStore {
   }
   
   /**
+   * Snapshot current variable values (for reverting)
+   * @returns {object} Snapshot of current values
+   */
+  snapshotValues() {
+    const data = this.getCurrentActivity();
+    if (!data) return {};
+    return { ...data.values };
+  }
+  
+  /**
+   * Restore variable values from a snapshot
+   * @param {object} snapshot - Values to restore
+   */
+  restoreValues(snapshot) {
+    const data = this.getCurrentActivity();
+    if (!data) return;
+    for (const [name, value] of Object.entries(snapshot)) {
+      if (data.definitions[name]) {
+        data.values[name] = value;
+        if (data.activity._values) {
+          data.activity._values[name] = value;
+        }
+      }
+    }
+  }
+  
+  /**
    * Get variable definition from current activity
    * @param {string} name - Variable name
    * @returns {object|undefined} Variable definition

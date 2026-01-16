@@ -23,6 +23,7 @@ export class Repl {
     this.running = false;
     this.inlineBuffer = ''; // Full inline composition buffer
     this.inputValue = ''; // Current value being typed for a variable
+    this.originalValues = null; // Snapshot of values when entering VAR EDIT mode
   }
   
   /**
@@ -110,7 +111,7 @@ export class Repl {
       const next = store.getNextActivity();
       if (next) {
         store.setCurrentActivity(next);
-        this._addOutput(`Switched to: ${next}`);
+        // this._addOutput(`Switched to: ${next}`);
       }
       return;
     }
@@ -120,7 +121,7 @@ export class Repl {
       const prev = store.getPrevActivity();
       if (prev) {
         store.setCurrentActivity(prev);
-        this._addOutput(`Switched to: ${prev}`);
+        // this._addOutput(`Switched to: ${prev}`);
       }
       return;
     }
@@ -141,9 +142,7 @@ export class Repl {
     if (key.type === 'char' && key.key === '$') {
       const firstVar = store.getFirstVariable();
       if (firstVar) {
-        this.mode.toInput(firstVar.name);
-        this.inlineBuffer = '';
-        this.inputValue = '';
+        this._enterVarEditMode(firstVar.name);
       }
       return;
     }
@@ -152,9 +151,7 @@ export class Repl {
     if (key.type === 'char') {
       const varInfo = store.findByHotkey(key.key);
       if (varInfo) {
-        this.mode.toInput(varInfo.name);
-        this.inlineBuffer = '';
-        this.inputValue = '';
+        this._enterVarEditMode(varInfo.name);
         return;
       }
       
@@ -229,8 +226,23 @@ export class Repl {
     const varName = this.mode.getInputVar();
     const def = store.getDefinition(varName);
     
-    // Escape - cancel and return to normal
+    // Escape - discard changes and return to normal
     if (key.type === 'special' && key.key === 'escape') {
+      // Revert to original values
+      if (this.originalValues) {
+        store.restoreValues(this.originalValues);
+      }
+      this.originalValues = null;
+      this.mode.toNormal();
+      this.inlineBuffer = '';
+      this.inputValue = '';
+      return;
+    }
+    
+    // Enter - apply changes and exit VAR EDIT mode
+    if (key.type === 'special' && key.key === 'enter') {
+      // Changes are already applied in real-time, just clear and exit
+      this.originalValues = null;
       this.mode.toNormal();
       this.inlineBuffer = '';
       this.inputValue = '';
@@ -242,7 +254,7 @@ export class Repl {
       const current = store.get(varName);
       const newVal = incrementValue(current, def);
       store.set(varName, newVal);
-      this.inlineBuffer += '+';
+      this._updateInputBufferFromVar(varName, def);
       return;
     }
     
@@ -251,7 +263,7 @@ export class Repl {
       const current = store.get(varName);
       const newVal = decrementValue(current, def);
       store.set(varName, newVal);
-      this.inlineBuffer += '-';
+      this._updateInputBufferFromVar(varName, def);
       return;
     }
     
@@ -262,6 +274,7 @@ export class Repl {
         const current = store.get(varName);
         const newVal = incrementValue(current, def);
         store.set(varName, newVal);
+        this._updateInputBufferFromVar(varName, def);
         return;
       }
       if (key.key === 'down') {
@@ -269,65 +282,98 @@ export class Repl {
         const current = store.get(varName);
         const newVal = decrementValue(current, def);
         store.set(varName, newVal);
+        this._updateInputBufferFromVar(varName, def);
         return;
       }
       if (key.key === 'left') {
         // Left arrow - select previous variable
-        this._commitInputValue(varName, def);
         const prevVar = store.getPrevVariable(varName);
         if (prevVar) {
-          this.mode.toInput(prevVar.name);
-          this.inlineBuffer = '';
-          this.inputValue = '';
+          this._selectVar(prevVar.name);
         }
         return;
       }
       if (key.key === 'right') {
         // Right arrow - select next variable
-        this._commitInputValue(varName, def);
         const nextVar = store.getNextVariable(varName);
         if (nextVar) {
-          this.mode.toInput(nextVar.name);
-          this.inlineBuffer = '';
-          this.inputValue = '';
+          this._selectVar(nextVar.name);
         }
         return;
       }
     }
     
-    // Backspace
+    // Backspace - remove last char and update var in real-time
     if (key.type === 'special' && key.key === 'backspace') {
       if (this.inputValue.length > 0) {
         this.inputValue = this.inputValue.slice(0, -1);
-        this.inlineBuffer = this.inlineBuffer.slice(0, -1);
+        this.inlineBuffer = this.inputValue;
+        // Update var in real-time
+        this._applyInputValue(varName, def);
       }
       return;
     }
     
-    // Check for variable hotkey (commit current, start new)
+    // Check for variable hotkey (switch to that variable)
     if (key.type === 'char') {
       const nextVar = store.findByHotkey(key.key);
       if (nextVar) {
-        // Commit current value
-        this._commitInputValue(varName, def);
-        // Start new variable
-        this.mode.toInput(nextVar.name);
-        this.inlineBuffer = '';
-        this.inputValue = '';
+        this._selectVar(nextVar.name);
         return;
       }
       
-      // Regular character - add to input value
+      // Regular character - add to input value and update var in real-time
       this.inputValue += key.key;
-      this.inlineBuffer += key.key;
+      this.inlineBuffer = this.inputValue;
+      this._applyInputValue(varName, def);
     }
-    
-    // Enter - commit value and return to normal
-    if (key.type === 'special' && key.key === 'enter') {
-      this._commitInputValue(varName, def);
-      this.mode.toNormal();
-      this.inlineBuffer = '';
-      this.inputValue = '';
+  }
+  
+  /**
+   * Enter VAR EDIT mode for a variable
+   * @private
+   */
+  _enterVarEditMode(varName) {
+    // Save original values for reverting on ESC
+    if (!this.originalValues) {
+      this.originalValues = store.snapshotValues();
+    }
+    this.mode.toInput(varName);
+    this._updateInputBufferFromVar(varName, store.getDefinition(varName));
+  }
+  
+  /**
+   * Select a variable (switch to it within VAR EDIT mode)
+   * @private
+   */
+  _selectVar(varName) {
+    this.mode.toInput(varName);
+    this._updateInputBufferFromVar(varName, store.getDefinition(varName));
+  }
+  
+  /**
+   * Update input buffer to show current var value
+   * @private
+   */
+  _updateInputBufferFromVar(varName, def) {
+    const value = store.get(varName);
+    const formatted = formatValue(value, def);
+    this.inputValue = formatted;
+    this.inlineBuffer = formatted;
+  }
+  
+  /**
+   * Apply input value to variable in real-time
+   * @private
+   */
+  _applyInputValue(varName, def) {
+    if (this.inputValue === '') {
+      // Empty input - don't update var
+      return;
+    }
+    const parsed = parseValue(this.inputValue, def);
+    if (parsed !== null) {
+      store.set(varName, parsed);
     }
   }
   
