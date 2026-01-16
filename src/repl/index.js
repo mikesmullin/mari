@@ -10,6 +10,7 @@ import { JogWheelHandler } from './jog.js';
 import { store } from '../commands/store.js';
 import { executeCommand, executeTemplate, isCommandKey, getCommandTemplate } from '../commands/executor.js';
 import { parseValue, incrementValue, decrementValue, formatValue } from '../config/variables.js';
+import { persistVariableValues } from '../config/loader.js';
 
 /**
  * REPL class
@@ -245,9 +246,20 @@ export class Repl {
       return;
     }
     
-    // Enter - apply changes and exit VAR EDIT mode
+    // Enter - apply changes, persist to disk, and exit VAR EDIT mode
     if (key.type === 'special' && key.key === 'enter') {
-      // Changes are already applied in real-time, just clear and exit
+      // Persist current values to YAML file
+      const activityData = store.getCurrentActivity();
+      if (activityData && activityData.activity) {
+        // Sync current store values to activity object
+        activityData.activity._values = { ...activityData.values };
+        try {
+          await persistVariableValues(activityData.activity);
+        } catch (err) {
+          this._addOutput(`Error saving: ${err.message}`);
+        }
+      }
+      
       this.originalValues = null;
       this.mode.toNormal();
       this.inlineBuffer = '';
@@ -430,6 +442,8 @@ export class Repl {
       onStdout: (data) => this._addOutput(data.trim()),
       onStderr: (data) => this._addOutput(data.trim())
     });
+    
+    this._addOutput(''); // Visual break after command
   }
   
   /**
@@ -450,6 +464,8 @@ export class Repl {
           onStdout: (data) => this._addOutput(data.trim()),
           onStderr: (data) => this._addOutput(data.trim())
         });
+        
+        this._addOutput(''); // Visual break after command
         return;
       }
     }

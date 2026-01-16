@@ -49,6 +49,15 @@ export async function initialize() {
 export async function runRepl(options = {}) {
   await initialize();
   
+  // Set starting activity if specified
+  if (options.activity) {
+    if (!store.setCurrentActivity(options.activity)) {
+      console.error(`Unknown activity: ${options.activity}`);
+      console.error(`Available: ${store.getActivityNames().join(', ')}`);
+      process.exit(1);
+    }
+  }
+  
   // Apply initial options to variables
   if (options.symbol) {
     const def = store.getDefinition('SYMBOL');
@@ -102,6 +111,9 @@ export async function main(args) {
       } else if (arg === '--qty' && args[i + 1]) {
         options.qty = args[i + 1];
         i++;
+      } else if (!arg.startsWith('-')) {
+        // Positional argument is the starting activity
+        options.activity = arg;
       }
     }
     

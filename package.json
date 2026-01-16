@@ -12,5 +12,8 @@
     "test:jog": "bun test/jog-wheel.js"
   },
   "author": "Mike Smullin <mike@smullindesign.com>",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "js-yaml": "^4.1.1"
+  }
 }

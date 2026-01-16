@@ -26,10 +26,17 @@ export function evalDefault(expr) {
 
 /**
  * Get the runtime default value for a variable
+ * Checks for 'value' first (literal), then 'default' (JS expression)
  * @param {object} def - Variable definition
  * @returns {any} Default value
  */
 export function getDefaultValue(def) {
+  // Check for persisted 'value' first (taken as literal)
+  if (def.value !== undefined) {
+    return parseLiteralValue(def.value, def);
+  }
+  
+  // Fall back to 'default' (can be a JS expression)
   if (def.default !== undefined) {
     return evalDefault(def.default);
   }
@@ -50,6 +57,38 @@ export function getDefaultValue(def) {
       return new Date();
     default:
       return null;
+  }
+}
+
+/**
+ * Parse a literal value string into the correct type
+ * Unlike evalDefault, this does not evaluate JS expressions
+ * @param {any} value - Literal value from YAML
+ * @param {object} def - Variable definition
+ * @returns {any} Parsed value
+ */
+export function parseLiteralValue(value, def) {
+  // If already the correct type, return as-is
+  if (value === null || value === undefined) {
+    return getDefaultValue({ ...def, value: undefined });
+  }
+  
+  switch (def.type) {
+    case 'int':
+      return typeof value === 'number' ? Math.floor(value) : parseInt(String(value), 10);
+    case 'float':
+      return typeof value === 'number' ? value : parseFloat(String(value));
+    case 'string':
+      return String(value);
+    case 'enum':
+      return String(value);
+    case 'date':
+      // Parse ISO date string or other date formats
+      if (value instanceof Date) return value;
+      const parsed = new Date(value);
+      return isNaN(parsed.getTime()) ? new Date() : parsed;
+    default:
+      return value;
   }
 }
 
