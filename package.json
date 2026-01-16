@@ -1,10 +1,16 @@
 {
-  "name": "midi-controller-tests",
-  "version": "1.0.0",
-  "description": "Hercules Starlight MIDI controller tests (zero dependencies)",
+  "name": "listy",
+  "version": "0.1.0",
+  "description": "CAD-style hotkey-driven CLI tool with REPL and shell modes",
   "type": "module",
+  "bin": {
+    "listy": "./bin/listy.js"
+  },
   "scripts": {
-    "test:midi": "bun test/midi-input.js",
+    "start": "bun bin/listy.js",
+    "repl": "bun bin/listy.js repl",
     "test:jog": "bun test/jog-wheel.js"
-  }
+  },
+  "author": "Mike Smullin <mike@smullindesign.com>",
+  "license": "MIT"
 }
