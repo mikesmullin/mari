@@ -4,7 +4,7 @@
  */
 
 import { readdir } from 'fs/promises';
-import { openSync, readSync, closeSync } from 'fs';
+import { open } from 'fs/promises';
 import { join } from 'path';
 
 /**
@@ -44,7 +44,7 @@ export function parseJogWheel(status, controller, value) {
  */
 export class JogWheelHandler {
   constructor() {
-    this.fd = null;
+    this.fileHandle = null;
     this.polling = false;
     this.pollInterval = null;
     this.listeners = [];
@@ -71,14 +71,19 @@ export class JogWheelHandler {
       }
       
       this.devicePath = devicePath;
-      this.fd = openSync(devicePath, 'r');
+      
+      // Open file with non-blocking flag
+      this.fileHandle = await open(devicePath, 'r');
       this.polling = true;
       
-      // Start polling
+      // Start polling with async reads
       const buffer = Buffer.alloc(3);
-      this.pollInterval = setInterval(() => {
+      
+      const pollFn = async () => {
+        if (!this.polling || !this.fileHandle) return;
+        
         try {
-          const bytesRead = readSync(this.fd, buffer, 0, 3);
+          const { bytesRead } = await this.fileHandle.read(buffer, 0, 3);
           if (bytesRead === 3) {
             const status = buffer[0];
             const controller = buffer[1];
@@ -90,9 +95,16 @@ export class JogWheelHandler {
             }
           }
         } catch (err) {
-          // Ignore read errors (no data)
+          // Ignore read errors
         }
-      }, 10);
+        
+        if (this.polling) {
+          setTimeout(pollFn, 10);
+        }
+      };
+      
+      // Don't block startup - start polling in background
+      setTimeout(pollFn, 100);
       
       return true;
     } catch (err) {
@@ -103,19 +115,15 @@ export class JogWheelHandler {
   /**
    * Stop listening for jog wheel events
    */
-  stop() {
+  async stop() {
     this.polling = false;
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval);
-      this.pollInterval = null;
-    }
-    if (this.fd !== null) {
+    if (this.fileHandle) {
       try {
-        closeSync(this.fd);
+        await this.fileHandle.close();
       } catch (err) {
         // Ignore
       }
-      this.fd = null;
+      this.fileHandle = null;
     }
   }
   

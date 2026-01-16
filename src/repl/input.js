@@ -8,6 +8,7 @@
  */
 export const KEY = {
   ENTER: '\r',
+  NEWLINE: '\n',
   ESCAPE: '\x1b',
   BACKSPACE: '\x7f',
   DELETE: '\x1b[3~',
@@ -42,7 +43,7 @@ export function parseKey(data) {
   }
   
   // Special keys
-  if (str === KEY.ENTER) {
+  if (str === KEY.ENTER || str === KEY.NEWLINE) {
     return { type: 'special', key: 'enter', raw: str };
   }
   if (str === KEY.ESCAPE) {
