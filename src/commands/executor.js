@@ -43,7 +43,10 @@ export async function executeCapture(command, options = {}) {
   return new Promise((resolve) => {
     const proc = spawn('sh', ['-c', command], {
       stdio: ['inherit', 'pipe', 'pipe'],
-      env: { ...process.env, ...options.env }
+      env: {
+        ...process.env,
+        ...options.env
+      }
     });
     
     let stdout = '';
@@ -116,7 +119,14 @@ export async function executeCommand(key, input = '', options = {}) {
   
   if (!template) return null;
   
-  return executeTemplate(template, input, options);
+  // Merge activity env vars with options.env
+  const activityEnv = activityData.activity.env || {};
+  const mergedOptions = {
+    ...options,
+    env: { ...activityEnv, ...options.env }
+  };
+  
+  return executeTemplate(template, input, mergedOptions);
 }
 
 /**

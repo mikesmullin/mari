@@ -158,7 +158,8 @@ export class Repl {
     if (key.type === 'char') {
       const varInfo = store.findByHotkey(key.key);
       if (varInfo) {
-        this._enterVarEditMode(varInfo.name);
+        // When entering via hotkey, start with blank input for faster editing
+        this._enterVarEditMode(varInfo.name, { blank: true });
         return;
       }
       
@@ -336,7 +337,8 @@ export class Repl {
     if (key.type === 'char') {
       const nextVar = store.findByHotkey(key.key);
       if (nextVar) {
-        this._selectVar(nextVar.name);
+        // When selecting via hotkey, start with blank input for faster editing
+        this._selectVar(nextVar.name, { blank: true });
         return;
       }
       
@@ -349,24 +351,41 @@ export class Repl {
   
   /**
    * Enter VAR EDIT mode for a variable
+   * @param {string} varName - Variable name
+   * @param {object} options - Options { blank: boolean }
    * @private
    */
-  _enterVarEditMode(varName) {
+  _enterVarEditMode(varName, options = {}) {
     // Save original values for reverting on ESC
     if (!this.originalValues) {
       this.originalValues = store.snapshotValues();
     }
     this.mode.toInput(varName);
-    this._updateInputBufferFromVar(varName, store.getDefinition(varName));
+    if (options.blank) {
+      // Start with blank input for faster editing
+      this.inputValue = '';
+      this.inlineBuffer = '';
+    } else {
+      this._updateInputBufferFromVar(varName, store.getDefinition(varName));
+    }
   }
   
   /**
-   * Select a variable (switch to it within VAR EDIT mode)
+  /**
+   * Select a variable in VAR EDIT mode
+   * @param {string} varName - Variable name to select
+   * @param {object} options - Options { blank: boolean }
    * @private
    */
-  _selectVar(varName) {
+  _selectVar(varName, options = {}) {
     this.mode.toInput(varName);
-    this._updateInputBufferFromVar(varName, store.getDefinition(varName));
+    if (options.blank) {
+      // Start with blank input for faster editing
+      this.inputValue = '';
+      this.inlineBuffer = '';
+    } else {
+      this._updateInputBufferFromVar(varName, store.getDefinition(varName));
+    }
   }
   
   /**
