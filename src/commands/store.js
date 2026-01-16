@@ -175,6 +175,61 @@ export class VariableStore {
   }
   
   /**
+   * Get first variable in current activity
+   * @returns {{name: string, def: object}|null} Variable info or null
+   */
+  getFirstVariable() {
+    const data = this.getCurrentActivity();
+    if (!data) return null;
+    
+    const entries = Object.entries(data.definitions);
+    if (entries.length === 0) return null;
+    
+    const [name, def] = entries[0];
+    return { name, def };
+  }
+  
+  /**
+   * Get next variable (cyclic)
+   * @param {string} currentName - Current variable name
+   * @returns {{name: string, def: object}|null} Variable info or null
+   */
+  getNextVariable(currentName) {
+    const data = this.getCurrentActivity();
+    if (!data) return null;
+    
+    const entries = Object.entries(data.definitions);
+    if (entries.length === 0) return null;
+    
+    const idx = entries.findIndex(([name]) => name === currentName);
+    if (idx === -1) return null;
+    
+    const nextIdx = (idx + 1) % entries.length;
+    const [name, def] = entries[nextIdx];
+    return { name, def };
+  }
+  
+  /**
+   * Get previous variable (cyclic)
+   * @param {string} currentName - Current variable name
+   * @returns {{name: string, def: object}|null} Variable info or null
+   */
+  getPrevVariable(currentName) {
+    const data = this.getCurrentActivity();
+    if (!data) return null;
+    
+    const entries = Object.entries(data.definitions);
+    if (entries.length === 0) return null;
+    
+    const idx = entries.findIndex(([name]) => name === currentName);
+    if (idx === -1) return null;
+    
+    const prevIdx = (idx - 1 + entries.length) % entries.length;
+    const [name, def] = entries[prevIdx];
+    return { name, def };
+  }
+  
+  /**
    * Get list of activity names
    * @returns {string[]} Activity names
    */

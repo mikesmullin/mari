@@ -137,6 +137,17 @@ export class Repl {
       return;
     }
     
+    // $ - enter VAR EDIT mode for first variable
+    if (key.type === 'char' && key.key === '$') {
+      const firstVar = store.getFirstVariable();
+      if (firstVar) {
+        this.mode.toInput(firstVar.name);
+        this.inlineBuffer = '';
+        this.inputValue = '';
+      }
+      return;
+    }
+    
     // Check for variable hotkey
     if (key.type === 'char') {
       const varInfo = store.findByHotkey(key.key);
@@ -226,8 +237,8 @@ export class Repl {
       return;
     }
     
-    // + key - increment
-    if (key.type === 'char' && key.key === '+') {
+    // + or = key - increment
+    if (key.type === 'char' && (key.key === '+' || key.key === '=')) {
       const current = store.get(varName);
       const newVal = incrementValue(current, def);
       store.set(varName, newVal);
@@ -235,13 +246,53 @@ export class Repl {
       return;
     }
     
-    // - key - decrement
-    if (key.type === 'char' && key.key === '-') {
+    // - or _ key - decrement
+    if (key.type === 'char' && (key.key === '-' || key.key === '_')) {
       const current = store.get(varName);
       const newVal = decrementValue(current, def);
       store.set(varName, newVal);
       this.inlineBuffer += '-';
       return;
+    }
+    
+    // Arrow keys for navigation and inc/dec
+    if (key.type === 'arrow') {
+      if (key.key === 'up') {
+        // Up arrow - increment (same as +)
+        const current = store.get(varName);
+        const newVal = incrementValue(current, def);
+        store.set(varName, newVal);
+        return;
+      }
+      if (key.key === 'down') {
+        // Down arrow - decrement (same as -)
+        const current = store.get(varName);
+        const newVal = decrementValue(current, def);
+        store.set(varName, newVal);
+        return;
+      }
+      if (key.key === 'left') {
+        // Left arrow - select previous variable
+        this._commitInputValue(varName, def);
+        const prevVar = store.getPrevVariable(varName);
+        if (prevVar) {
+          this.mode.toInput(prevVar.name);
+          this.inlineBuffer = '';
+          this.inputValue = '';
+        }
+        return;
+      }
+      if (key.key === 'right') {
+        // Right arrow - select next variable
+        this._commitInputValue(varName, def);
+        const nextVar = store.getNextVariable(varName);
+        if (nextVar) {
+          this.mode.toInput(nextVar.name);
+          this.inlineBuffer = '';
+          this.inputValue = '';
+        }
+        return;
+      }
     }
     
     // Backspace

@@ -1,11 +1,15 @@
 /**
  * Jog wheel MIDI input handler
- * Reads from /dev/snd/midiC* devices
+ * Reads from /dev/snd/midiC* devices using non-blocking I/O
  */
 
 import { readdir } from 'fs/promises';
-import { open } from 'fs/promises';
+import { open as openCb, read as readCb, close as closeCb, constants } from 'fs';
 import { join } from 'path';
+import { promisify } from 'util';
+
+const openAsync = promisify(openCb);
+const closeAsync = promisify(closeCb);
 
 /**
  * Find MIDI devices
@@ -44,9 +48,8 @@ export function parseJogWheel(status, controller, value) {
  */
 export class JogWheelHandler {
   constructor() {
-    this.fileHandle = null;
+    this.fd = null;
     this.polling = false;
-    this.pollInterval = null;
     this.listeners = [];
     this.devicePath = null;
   }
@@ -72,38 +75,33 @@ export class JogWheelHandler {
       
       this.devicePath = devicePath;
       
-      // Open file with non-blocking flag
-      this.fileHandle = await open(devicePath, 'r');
+      // Open with O_RDONLY | O_NONBLOCK for non-blocking reads
+      this.fd = await openAsync(devicePath, constants.O_RDONLY | constants.O_NONBLOCK);
       this.polling = true;
       
-      // Start polling with async reads
+      // Start polling with non-blocking reads
       const buffer = Buffer.alloc(3);
       
-      const pollFn = async () => {
-        if (!this.polling || !this.fileHandle) return;
+      const pollFn = () => {
+        if (!this.polling || this.fd === null) return;
         
-        try {
-          const { bytesRead } = await this.fileHandle.read(buffer, 0, 3);
-          if (bytesRead === 3) {
-            const status = buffer[0];
-            const controller = buffer[1];
-            const value = buffer[2];
-            
-            const direction = parseJogWheel(status, controller, value);
+        // Use callback-based read for non-blocking behavior
+        readCb(this.fd, buffer, 0, 3, null, (err, bytesRead) => {
+          if (!err && bytesRead === 3) {
+            const direction = parseJogWheel(buffer[0], buffer[1], buffer[2]);
             if (direction) {
               this._emit(direction);
             }
           }
-        } catch (err) {
-          // Ignore read errors
-        }
-        
-        if (this.polling) {
-          setTimeout(pollFn, 10);
-        }
+          // EAGAIN means no data available - that's fine
+          
+          if (this.polling) {
+            setTimeout(pollFn, 5);
+          }
+        });
       };
       
-      // Don't block startup - start polling in background
+      // Start polling in background
       setTimeout(pollFn, 100);
       
       return true;
@@ -117,13 +115,13 @@ export class JogWheelHandler {
    */
   async stop() {
     this.polling = false;
-    if (this.fileHandle) {
+    if (this.fd !== null) {
       try {
-        await this.fileHandle.close();
+        await closeAsync(this.fd);
       } catch (err) {
         // Ignore
       }
-      this.fileHandle = null;
+      this.fd = null;
     }
   }
   

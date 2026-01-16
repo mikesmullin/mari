@@ -21,6 +21,27 @@ const FG_MAGENTA = `${ESC}[35m`;
 const BG_BLUE = `${ESC}[44m`;
 const BG_BLACK = `${ESC}[40m`;
 
+// Color name to ANSI code map
+const BG_COLORS = {
+  black: `${ESC}[40m`,
+  red: `${ESC}[41m`,
+  green: `${ESC}[42m`,
+  yellow: `${ESC}[43m`,
+  blue: `${ESC}[44m`,
+  magenta: `${ESC}[45m`,
+  cyan: `${ESC}[46m`,
+  white: `${ESC}[47m`,
+  // Bright variants
+  brightBlack: `${ESC}[100m`,
+  brightRed: `${ESC}[101m`,
+  brightGreen: `${ESC}[102m`,
+  brightYellow: `${ESC}[103m`,
+  brightBlue: `${ESC}[104m`,
+  brightMagenta: `${ESC}[105m`,
+  brightCyan: `${ESC}[106m`,
+  brightWhite: `${ESC}[107m`,
+};
+
 /**
  * Get terminal dimensions
  * @returns {{cols: number, rows: number}}
@@ -77,10 +98,12 @@ export function clearScreen() {
 /**
  * Format the activity badge
  * @param {string} name - Activity name
+ * @param {string} color - Background color name (optional)
  * @returns {string} Formatted badge
  */
-function formatActivityBadge(name) {
-  return `${BOLD}${BG_BLUE}${FG_WHITE} ${name || 'none'} ${RESET}`;
+function formatActivityBadge(name, color = 'blue') {
+  const bgColor = BG_COLORS[color] || BG_COLORS.blue;
+  return `${BOLD}${bgColor}${FG_WHITE} ${name || 'none'} ${RESET}`;
 }
 
 /**
@@ -116,11 +139,12 @@ function formatVariables(activeVar) {
   for (const [name, def] of Object.entries(data.definitions)) {
     const value = data.values[name];
     const formatted = formatValue(value, def);
+    const hotkey = def.hotkey ? `${BG_COLORS.blue}${FG_WHITE}${def.hotkey}${RESET} ` : '';
     
     if (name === activeVar) {
-      parts.push(`${INVERT}${name}:${formatted}${RESET}`);
+      parts.push(`${hotkey}${INVERT}${name}:${formatted}${RESET}`);
     } else {
-      parts.push(`${name}:${formatted}`);
+      parts.push(`${hotkey}${name}:${formatted}`);
     }
   }
   
@@ -137,8 +161,14 @@ function formatContext() {
   
   const values = data.values;
   const defs = data.definitions;
+  const activity = data.activity;
   
-  // Check for trading-like variables
+  // Use custom statusFormat if provided in activity YAML
+  if (activity.statusFormat) {
+    return formatStatusTemplate(activity.statusFormat, values, defs);
+  }
+  
+  // Default format for trading-like variables
   const qty = values.QTY;
   const symbol = values.SYMBOL;
   const exp = values.EXP;
@@ -168,6 +198,40 @@ function formatContext() {
 }
 
 /**
+ * Format status template with variable substitution
+ * Supports modifiers: ${VAR:short} for first character
+ * Variables are referenced as $VAR or ${VAR}
+ * @param {string} template - Status format template
+ * @param {object} values - Variable values
+ * @param {object} defs - Variable definitions
+ * @returns {string} Formatted status string
+ */
+function formatStatusTemplate(template, values, defs) {
+  let result = template;
+  
+  // Replace ${VAR:modifier} with formatted values
+  result = result.replace(/\$\{(\w+)(?::(\w+))?\}/g, (match, name, modifier) => {
+    if (values[name] !== undefined) {
+      let val = defs[name] ? formatValue(values[name], defs[name]) : String(values[name]);
+      if (modifier === 'short') {
+        val = String(val).charAt(0).toLowerCase();
+      }
+      return val;
+    }
+    return match;
+  });
+  
+  result = result.replace(/\$(\w+)/g, (match, name) => {
+    if (values[name] !== undefined) {
+      return defs[name] ? formatValue(values[name], defs[name]) : String(values[name]);
+    }
+    return match;
+  });
+  
+  return result;
+}
+
+/**
  * Render the statusbar
  * @param {object} state - Current state
  * @returns {string} Rendered statusbar
@@ -175,9 +239,11 @@ function formatContext() {
 export function renderStatusbar(state) {
   const { cols, rows } = getTermSize();
   const activityName = store.getCurrentActivityName();
+  const activityData = store.getCurrentActivity();
+  const activityColor = activityData?.activity?.color || 'blue';
   
   // Build components
-  const activity = formatActivityBadge(activityName);
+  const activity = formatActivityBadge(activityName, activityColor);
   const buffer = state.buffer || '';
   const cursor = '█';
   const mode = formatMode(state.mode);
