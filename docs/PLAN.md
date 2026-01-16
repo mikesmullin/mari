@@ -60,63 +60,53 @@ description: Stock & Options Trading
 # ─────────────────────────────────────────────────────────────────
 # VARIABLES
 # ─────────────────────────────────────────────────────────────────
-# Variables define typed, range-constrained values that can be:
-#   - Set via `:set VAR value`
-#   - Adjusted via jog wheel (CW/CCW) or +/- keys
-#   - Bound to a hotkey for quick editing
+# Variables are scoped to this activity.
+# All default values are JS expressions (evaluated at activity load).
+# Variables can be set inline before a command key.
 #
 variables:
   QTY:
     type: int
-    default: 10
-    range: [1, 100]           # min, max
-    step: 1                   # jog/+/- increment
-    format: "%d"              # printf-style display
-    hotkey: q                 # press 'q' to enter :set QTY mode
+    default: "10"                     # JS expression: evaluates to 10
+    range: [1, 100]
+    step: 1
+    format: "%d"
+    hotkey: q
 
   SYMBOL:
-    type: enum
-    default: SPY
-    range: [SPY, QQQ, IWM, TSLA, AAPL, NVDA, AMD, MSFT]
-    hotkey: s
-    # jog wheel / +/- rotates through the enum values
+    type: string
+    default: "'TSLA'"                 # JS expression: evaluates to "TSLA"
+    hotkey: y                         # 'y' for sYmbol
 
   EXP:
     type: date
-    # default omitted → uses current date
-    range: 2025-01-01..2026-12-31   # valid date range
-    step: 1                         # days to inc/dec
-    format: "M/d"                   # display format (1/17, not 01/17)
-    hotkey: e
-
-  # Alternative: dynamic default via JS expression
-  # EXP:
-  #   type: date
-  #   default: "{{ new Date(Date.now() + 2*24*60*60*1000) }}"  # 2 days from now
-  #   range: 2025-01-01..2026-12-31
-  #   format: "M/d"
+    default: "new Date()"             # JS: current date
+    range: 2025-01-01..2026-12-31
+    step: 1
+    format: "M/d"
+    hotkey: x                         # 'x' for eXpiration
 
   STRIKE:
     type: float
-    default: 225.0
+    default: "225.0"
     range: [1.0, 9999.0]
     step: 0.5
-    format: "%.1f"
-    hotkey: k                 # 'k' for striKe
+    format: "%.0f"                    # no decimal for display
+    hotkey: t                         # 't' for sTrike
 
   TYPE:
     type: enum
-    default: call
+    default: "'call'"
     range: [call, put]
-    hotkey: t
+    hotkey: c                         # 'c' for Call/put
 
   PRICE:
     type: float
-    default: 0.50
+    default: "0.50"
     range: [0.01, 999.99]
     step: 0.01
-    format: "$%.2f"
-    hotkey: p
+    format: "%.2f"
+    hotkey: l                         # 'l' for Limit price
 
 # ─────────────────────────────────────────────────────────────────
 # COMMANDS
@@ -150,80 +140,97 @@ commands:
 # ─────────────────────────────────────────────────────────────────
 # JOG WHEEL
 # ─────────────────────────────────────────────────────────────────
+# Jog wheel and +/- keys only affect variables while in VAR EDIT mode.
+# No default binding — the jog wheel is inactive in NORMAL mode.
 jog:
-  default: QTY              # Default variable bound to jog wheel
+  # (no default binding)
 
 # ─────────────────────────────────────────────────────────────────
 # ALIASES
 # ─────────────────────────────────────────────────────────────────
+# All alias values are JS expressions (evaluated at command execution time)
 aliases:
-  fri: "1/17"
-  nxt: "1/24"
-  mon: "1/31"
-  c: call
-  p: put
+  fri: "(() => { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7)); return d; })()"
+  nxt: "(() => { const d = new Date(); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7) + 7); return d; })()"
+  mon: "new Date('2026-01-31')"
 ```
 
 ---
 
 ### Variable Definition Schema
 
+**Variables are scoped to their activity.** Each activity has its own independent set of variables.
+**Variable changes are persisted in real-time** to the activity's YAML file.
+
 ```yaml
 variables:
   VAR_NAME:
     type: int | float | string | enum | date
-    default: <value> | "{{ <js-expression> }}"  # Static or dynamic
+    default: "<js-expression>"          # JS expression (evaluated at command execution)
     range: [min, max] | [val1, ...] | YYYY-MM-DD..YYYY-MM-DD
     step: <number>                      # Increment for jog/+/- (optional)
     format: "<format-string>"           # Display format (optional)
-    hotkey: <key>                       # Quick-set hotkey (optional)
+    hotkey: <key>                       # Inline variable shortcut (optional)
     validate: "<regex>"                 # Validation pattern (optional)
 ```
 
 | Type     | Range Format                 | Default if omitted      | Jog/+/- Behavior                          |
 |----------|------------------------------|-------------------------|-------------------------------------------|
-| `int`    | `[min, max]`                 | `0`                     | Increment/decrement by `step` (default 1) |
-| `float`  | `[min, max]`                 | `0.0`                   | Increment/decrement by `step`             |
-| `string` | (none)                       | `""`                    | N/A (manual entry only)                   |
-| `enum`   | `[val1, val2, val3, ...]`    | first value             | Rotate through values in order            |
-| `date`   | `YYYY-MM-DD..YYYY-MM-DD`     | **current date**        | Increment/decrement by `step` days        |
+| `int`    | `[min, max]`                 | `"0"`                   | Increment/decrement by `step` (default 1) |
+| `float`  | `[min, max]`                 | `"0.0"`                 | Increment/decrement by `step`             |
+| `string` | (none)                       | `"''"`                  | N/A (manual entry only)                   |
+| `enum`   | `[val1, val2, val3, ...]`    | first value as JS       | Rotate through values in order            |
+| `date`   | `YYYY-MM-DD..YYYY-MM-DD`     | `"new Date()"`          | Increment/decrement by `step` days        |
+
+**All `default` values are JavaScript expressions:**
+```yaml
+# Literal values (still JS)
+default: "10"              # number
+default: "'TSLA'"          # string (note the quotes)
+default: "0.50"            # float
+
+# Dynamic values
+default: "new Date()"                              # current date
+default: "parseInt(process.env.QTY) || 10"         # env var with fallback
+default: "(() => { /* complex logic */ })()"
+```
 
 ---
 
-### Dynamic Defaults
+### Dynamic Defaults (All JS)
 
-Defaults can be computed at runtime using JavaScript expressions wrapped in `{{ }}`:
+**All default values are JavaScript expressions**, evaluated at command execution time:
 
 ```yaml
 variables:
-  # Current date (default for date type anyway)
+  # Simple literal (still valid JS)
+  QTY:
+    type: int
+    default: "10"
+
+  # Current date
   TODAY:
     type: date
-    default: "{{ new Date() }}"
+    default: "new Date()"
     format: "M/d"
 
   # Next Friday
   NEXT_FRIDAY:
     type: date
     default: |
-      {{
+      (() => {
         const d = new Date();
         d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7));
-        d
-      }}
+        return d;
+      })()
     format: "M/d"
 
-  # Default quantity based on env var
+  # Env var with fallback
   QTY:
     type: int
-    default: "{{ parseInt(process.env.DEFAULT_QTY) || 10 }}"
+    default: "parseInt(process.env.DEFAULT_QTY) || 10"
     range: [1, 100]
 ```
-
-The JS expression is evaluated once at activity load time. The expression should return:
-- A `Date` object for `date` type
-- A number for `int`/`float` type
-- A string for `string`/`enum` type
 
 ---
 
@@ -289,10 +296,10 @@ The statusbar is always visible at the bottom and arranged as:
 │   Press `:` ─────────────────► CMD MODE                         │
 │   Press `A` ─────────────────► AGENT MODE                       │
 │   Press `Tab` ───────────────► Rotate to next activity          │
-│   Press `+` / `-` ───────────► Inc/dec jog-bound variable       │
-│   Press var hotkey (q,s,p..) ► VAR EDIT MODE for that variable  │
-│   Press cmd hotkey (b,o,x..) ► Executes mapped command          │
+│   Press var hotkey ──────────► Begin inline variable input      │
+│   Press cmd hotkey ──────────► Execute command (immediate)      │
 │                                                                 │
+│   Jog wheel / +/- have NO effect in NORMAL mode                 │
 │   Esc from any mode ─────────► returns to NORMAL                │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -301,21 +308,65 @@ The statusbar is always visible at the bottom and arranged as:
 |-----------|---------------|----------------------------------------------|---------------|
 | NORMAL    | (default)     | Idle state; hotkey dispatch                  | —             |
 | CMD       | `:`           | Execute commands, set variables              | `Esc`/`Enter` |
-| VAR EDIT  | var hotkey    | Edit a specific variable (jog/+/-/type)      | `Esc`/`Enter` |
+| INPUT     | var hotkey    | Inline variable entry (jog/+/-/type active)  | value or cmd  |
 | AGENT     | `A`           | AI agent interaction (future)                | `Esc`         |
 
 ---
 
-### Variable Hotkeys (VAR EDIT Mode)
+### Inline Command Composition
 
-When a variable has a `hotkey` defined in the activity YAML, pressing that key enters **VAR EDIT mode** for that variable:
+Variables can be set **inline** before pressing a command key. This allows rapid command entry without explicit `:set` or `Enter` for each variable.
 
-1. Press `q` → enters `:set QTY ` mode with current value shown
-2. Use jog wheel CW/CCW **or** `+`/`-` keys to adjust
-3. Or type a new value directly
-4. Press `Enter` to apply (validated), `Esc` to cancel
+**Syntax:** `<var><value><var><value>...<CMD>`
 
-This allows rapid adjustment: `q` → spin jog wheel → `Enter`
+- **Variable hotkeys** (e.g., `q`, `y`, `x`, `t`, `c`, `l`) begin value input for that variable
+- **While entering a variable value:**
+  - Jog wheel CW/CCW and `+`/`-` keys adjust the value
+  - Typing directly sets the value
+  - Pressing another variable hotkey commits current and starts next
+  - Pressing a command key commits current and executes command
+- **Command keys** (e.g., `S`, `B`) execute immediately (no `Enter` needed)
+- Any variable not set inline uses its current/default value
+
+**Example:**
+```
+Input: q10yTSLAx1/12t256cl.35S
+
+Breakdown:
+  q10      → QTY = 10
+  yTSLA    → SYMBOL = "TSLA"
+  x1/12    → EXP = 1/12 (date)
+  t256     → STRIKE = 256
+  c        → TYPE = call (pressing 'c' toggles, or use +/-)
+  l.35     → PRICE = 0.35
+  S        → Execute SELL command
+
+Result: robin option sell 10 TSLA 1/12 256 call limit 0.35
+```
+
+**All of these are valid:**
+```
+S                    # Use all current/default values
+yTSLAS               # Only change SYMBOL, use rest as-is
+yTSLAq1S             # Change SYMBOL and QTY
+q+++++S              # Increment QTY 5 times, then sell
+```
+
+---
+
+### Variable Display
+
+**All variable values are visible on-screen** while in INPUT mode:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ QTY:10  SYMBOL:TSLA  EXP:1/17  STRIKE:256  TYPE:call  PRICE:0.50 │
+├──────────────────────────────────────────────────────────────────┤
+│ [robin] q10yTSLAx1/12█                                           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+The variable currently being edited is highlighted. Values update in real-time as you type or use jog/+/-.
 
 ---
 
@@ -462,152 +513,131 @@ This allows rapid adjustment: `q` → spin jog wheel → `Enter`
 
 ---
 
-### Example 4: Using Jog Wheel to Adjust Quantity
+### Example 4: Inline Command Composition
 
-**User is in NORMAL mode, jog wheel is bound to QTY:**
+**User starts typing in NORMAL mode - presses `q` (QTY hotkey):**
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                                                                  │
+│ QTY:10  SYMBOL:TSLA  EXP:1/15  STRIKE:225  TYPE:call  PRICE:0.50 │
 ├──────────────────────────────────────────────────────────────────┤
-│ [robin]                    5x IWM 1/17 225p @ $0.45        [QTY] │
+│ [robin] q█                                                       │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**User rotates jog wheel CW 3 clicks (or presses `+` 3 times):**
+**User types `10` then presses `y` (SYMBOL hotkey):**
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                                                                  │
+│ QTY:10  SYMBOL:TSLA  EXP:1/15  STRIKE:225  TYPE:call  PRICE:0.50 │
 ├──────────────────────────────────────────────────────────────────┤
-│ [robin]                    8x IWM 1/17 225p @ $0.45        [QTY] │
+│ [robin] q10y█                                                    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**User presses `:` then types `jog PRICE` to switch jog target:**
+**User types `TSLA` then presses `x` (EXP hotkey):**
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ JOG -> PRICE (step: $0.01)                                       │
+│ QTY:10  SYMBOL:TSLA  EXP:1/15  STRIKE:225  TYPE:call  PRICE:0.50 │
 ├──────────────────────────────────────────────────────────────────┤
-│ [robin]                    8x IWM 1/17 225p @ $0.45      [PRICE] │
+│ [robin] q10yTSLAx█                                               │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**User rotates jog wheel CCW 5 clicks (or presses `-` 5 times):**
+**User types `1/12` then presses `t` then `256` then `c` then `l` then `.35`:**
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                                                                  │
+│ QTY:10  SYMBOL:TSLA  EXP:1/12  STRIKE:256  TYPE:call  PRICE:0.35 │
 ├──────────────────────────────────────────────────────────────────┤
-│ [robin]                    8x IWM 1/17 225p @ $0.40      [PRICE] │
+│ [robin] q10yTSLAx1/12t256cl.35█                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**User presses `S` (SELL command) — executes immediately:**
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ $ robin option sell 10 TSLA 1/12 256 call limit 0.35             │
+│ Order submitted: SELL 10x TSLA 1/12 256C @ $0.35                 │
+│ Order ID: xyz789abc123                                           │
+│                                                                  │
+│ QTY:10  SYMBOL:TSLA  EXP:1/12  STRIKE:256  TYPE:call  PRICE:0.35 │
+├──────────────────────────────────────────────────────────────────┤
+│ [robin]                                            -- NORMAL --  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Example 5: Quick Variable Edit via Hotkey
+### Example 5: Quick Jog Wheel Adjustment
 
-**User presses `q` (hotkey for QTY variable):**
+**User presses `q` to start editing QTY:**
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                                                                  │
+│ QTY:10  SYMBOL:TSLA  EXP:1/12  STRIKE:256  TYPE:call  PRICE:0.35 │
 ├──────────────────────────────────────────────────────────────────┤
-│ [robin] :set QTY 8█                              -- VAR EDIT --  │
+│ [robin] q█                                                       │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**User spins jog wheel CW (or presses `+` repeatedly):**
+**User spins jog wheel CW (or presses `+` repeatedly) — QTY increments:**
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                                                                  │
+│ QTY:15  SYMBOL:TSLA  EXP:1/12  STRIKE:256  TYPE:call  PRICE:0.35 │
 ├──────────────────────────────────────────────────────────────────┤
-│ [robin] :set QTY 15█                             -- VAR EDIT --  │
+│ [robin] q█                                                       │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**User presses `Enter` to apply:**
+**User presses `B` (BUY command) — commits QTY and executes:**
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ QTY=15                                                           │
+│ $ robin option buy 15 TSLA 1/12 256 call limit 0.35              │
+│ Order submitted: BUY 15x TSLA 1/12 256C @ $0.35                  │
+│                                                                  │
+│ QTY:15  SYMBOL:TSLA  EXP:1/12  STRIKE:256  TYPE:call  PRICE:0.35 │
 ├──────────────────────────────────────────────────────────────────┤
-│ [robin]                   15x IWM 1/17 225p @ $0.40        [QTY] │
+│ [robin]                                            -- NORMAL --  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Example 6: Enum Variable Rotation
+### Example 6: Minimal Input (Use Defaults)
 
-**User presses `t` (hotkey for TYPE variable):**
+**User just presses `S` (no variable changes):**
 ```
 ┌──────────────────────────────────────────────────────────────────┐
+│ $ robin option sell 15 TSLA 1/12 256 call limit 0.35             │
+│ Order submitted: SELL 15x TSLA 1/12 256C @ $0.35                 │
 │                                                                  │
+│ QTY:15  SYMBOL:TSLA  EXP:1/12  STRIKE:256  TYPE:call  PRICE:0.35 │
 ├──────────────────────────────────────────────────────────────────┤
-│ [robin] :set TYPE call█                          -- VAR EDIT --  │
+│ [robin]                                            -- NORMAL --  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**User presses `+` (rotates to next enum value):**
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                                                                  │
-├──────────────────────────────────────────────────────────────────┤
-│ [robin] :set TYPE put█                           -- VAR EDIT --  │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**User presses `Enter`:**
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ TYPE=put                                                         │
-├──────────────────────────────────────────────────────────────────┤
-│ [robin]                   15x IWM 1/17 225p @ $0.40              │
-└──────────────────────────────────────────────────────────────────┘
-```
+All current variable values are used — no input required beyond the command key.
 
 ---
 
-### Example 7: Validation Rejection
+### Example 7: Toggling Enum with +/-
 
-**User presses `e` (hotkey for EXP variable):**
+**User presses `c` (TYPE hotkey) then `+` to toggle:**
 ```
 ┌──────────────────────────────────────────────────────────────────┐
+│ QTY:15  SYMBOL:TSLA  EXP:1/12  STRIKE:256  TYPE:put  PRICE:0.35  │
+├──────────────────────────────────────────────────────────────────┤
+│ [robin] c█                                                       │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**User presses `S` — commits TYPE=put and sells:**
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ $ robin option sell 15 TSLA 1/12 256 put limit 0.35              │
+│ Order submitted: SELL 15x TSLA 1/12 256P @ $0.35                 │
 │                                                                  │
+│ QTY:15  SYMBOL:TSLA  EXP:1/12  STRIKE:256  TYPE:put  PRICE:0.35  │
 ├──────────────────────────────────────────────────────────────────┤
-│ [robin] :set EXP 1/17█                           -- VAR EDIT --  │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**User types invalid value: `tomorrow`**
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                                                                  │
-├──────────────────────────────────────────────────────────────────┤
-│ [robin] :set EXP tomorrow█                   [!] -- VAR EDIT --  │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**User presses `Enter` — rejected (no-op), stays in VAR EDIT:**
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ [!] Invalid: must match ^\d{1,2}/\d{1,2}$                        │
-├──────────────────────────────────────────────────────────────────┤
-│ [robin] :set EXP tomorrow█                   [!] -- VAR EDIT --  │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**User clears and types valid value: `1/24`**
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                                                                  │
-├──────────────────────────────────────────────────────────────────┤
-│ [robin] :set EXP 1/24█                           -- VAR EDIT --  │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**User presses `Enter` — accepted:**
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ EXP=1/24                                                         │
-├──────────────────────────────────────────────────────────────────┤
-│ [robin]                   15x IWM 1/24 225p @ $0.40              │
+│ [robin]                                            -- NORMAL --  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -674,16 +704,14 @@ $ listy repl --symbol SPY --qty 10
 
 | Command                  | Description                                    |
 |--------------------------|------------------------------------------------|
-| `:set VAR VALUE`         | Set in-memory variable                         |
-| `:unset VAR`             | Unset variable                                 |
+| `:set VAR VALUE`         | Set variable (persisted to activity YAML)      |
+| `:unset VAR`             | Reset variable to default                      |
 | `:vars`                  | List all variables                             |
-| `:jog VAR`               | Bind jog wheel to variable                     |
-| `:jog step N`            | Set jog wheel step size                        |
-| `:config`                | Reload config.yml                              |
-| `:map KEY CMD`           | Create runtime hotkey mapping                  |
-| `:unmap KEY`             | Remove hotkey mapping                          |
+| `:reload`                | Reload activity files from disk                |
 | `:q` / `:quit`           | Exit REPL                                      |
 | `:help`                  | Show help                                      |
+
+**Note:** Jog wheel and +/- are automatically bound to whichever variable is currently being edited (INPUT mode). There is no explicit `:jog` binding command.
 
 ---
 
@@ -795,17 +823,6 @@ From `docs/CAD.md`:
 - **Terminal UI**: Raw TTY mode via Node/Bun APIs
 - **Installation**: `bun link` for global `listy` command
 
----
+## References
 
-## TODO / Future
-
-- [ ] AGENT mode implementation (AI chat integration)
-- [ ] Expression parser for numeric input (`5*10`, `100/4`)
-- [ ] History/undo for variable changes
-- [ ] Persistent variable storage (optional)
-- [ ] Activity-specific variable persistence
-- [ ] Multi-jog-wheel support
-- [ ] Configurable statusbar layout
-- [ ] Activity search/filter (for many activities)
-- [ ] Variable presets (save/load named variable snapshots)
-- [ ] Remote config sync (git-based activity sharing)
+- read `test/jog-wheel.js` to understand how we read the jog wheel input 
