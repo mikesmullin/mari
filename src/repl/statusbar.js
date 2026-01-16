@@ -135,6 +135,57 @@ export function clearScreen() {
 }
 
 /**
+ * Move cursor up N lines
+ * @param {number} n - Number of lines
+ * @returns {string} ANSI escape sequence
+ */
+export function moveUp(n = 1) {
+  return `${ESC}[${n}A`;
+}
+
+/**
+ * Clear from cursor to end of line
+ * @returns {string} ANSI escape sequence
+ */
+export function clearToEOL() {
+  return `${ESC}[K`;
+}
+
+/**
+ * Save cursor position
+ * @returns {string} ANSI escape sequence
+ */
+export function saveCursor() {
+  return `${ESC}7`;
+}
+
+/**
+ * Restore cursor position
+ * @returns {string} ANSI escape sequence
+ */
+export function restoreCursor() {
+  return `${ESC}8`;
+}
+
+/**
+ * Set scroll region (limits scrolling to rows 1 to n)
+ * @param {number} top - Top row (1-indexed)
+ * @param {number} bottom - Bottom row (1-indexed)
+ * @returns {string} ANSI escape sequence
+ */
+export function setScrollRegion(top, bottom) {
+  return `${ESC}[${top};${bottom}r`;
+}
+
+/**
+ * Reset scroll region to full screen
+ * @returns {string} ANSI escape sequence
+ */
+export function resetScrollRegion() {
+  return `${ESC}[r`;
+}
+
+/**
  * Format the activity badge
  * @param {string} name - Activity name
  * @param {string} color - Background color name or hex value (optional)
@@ -336,38 +387,134 @@ export function renderVariableLine(activeVar) {
   return vars || '';
 }
 
+// Track current status bar height for clearing
+let currentStatusHeight = 1;
+
 /**
- * Full render to terminal
+ * Get the number of status bar lines (1 for normal, 2 for INPUT mode with var line)
  * @param {object} state - Current state
- * @param {string[]} output - Output lines to display
+ * @returns {number} Number of status bar lines
  */
-export function render(state, output = []) {
-  const { cols, rows } = getTermSize();
+function getStatusHeight(state) {
+  return state.mode === 'INPUT' ? 2 : 1;
+}
+
+/**
+ * Initialize the terminal for REPL mode
+ * Sets up scroll region and clears screen
+ * @param {object} state - Current state
+ */
+export function initTerminal(state) {
+  const { rows } = getTermSize();
+  currentStatusHeight = getStatusHeight(state);
+  const scrollBottom = rows - currentStatusHeight;
+  
+  let init = '';
+  init += hideCursor();
+  init += clearScreen();
+  init += setScrollRegion(1, scrollBottom);
+  init += moveTo(1, 1);  // Position cursor at top of scroll region
+  init += showCursor();
+  
+  process.stdout.write(init);
+  
+  // Draw initial status bar
+  renderStatusOnly(state);
+}
+
+/**
+ * Reset terminal to normal state
+ */
+export function resetTerminal() {
+  let reset = '';
+  reset += resetScrollRegion();
+  reset += showCursor();
+  process.stdout.write(reset);
+}
+
+/**
+ * Render only the status bar (bottom lines)
+ * Used when status needs updating without printing output
+ * @param {object} state - Current state
+ */
+export function renderStatusOnly(state) {
+  const { rows } = getTermSize();
+  const newHeight = getStatusHeight(state);
+  
   let screen = '';
+  screen += hideCursor();
+  screen += saveCursor();
   
-  // Clear and position
-  screen += clearScreen();
+  // Clear old status lines (clear the max of old and new to handle shrinking)
+  const clearHeight = Math.max(currentStatusHeight, newHeight);
+  for (let i = 0; i < clearHeight; i++) {
+    screen += moveTo(rows - i, 1) + clearLine();
+  }
   
-  // Output area (rows 1 to rows-2)
-  const outputRows = rows - 2;
-  const displayOutput = output.slice(-outputRows);
-  
-  for (let i = 0; i < displayOutput.length; i++) {
-    screen += moveTo(i + 1, 1) + displayOutput[i];
+  // Update scroll region if height changed
+  if (newHeight !== currentStatusHeight) {
+    currentStatusHeight = newHeight;
+    const scrollBottom = rows - currentStatusHeight;
+    screen += setScrollRegion(1, scrollBottom);
   }
   
   // Variable line (if in INPUT mode)
   if (state.mode === 'INPUT') {
     const varLine = renderVariableLine(state.inputVar);
-    screen += moveTo(rows - 1, 1) + clearLine() + varLine;
+    screen += moveTo(rows - 1, 1) + varLine;
   }
   
   // Statusbar (last row)
   const statusbar = renderStatusbar(state);
-  screen += moveTo(rows, 1) + clearLine() + statusbar;
+  screen += moveTo(rows, 1) + statusbar;
   
-  // Hide cursor during render
-  screen = hideCursor() + screen + showCursor();
+  screen += restoreCursor();
+  screen += showCursor();
   
   process.stdout.write(screen);
+}
+
+/**
+ * Print output line(s) and refresh status bar
+ * Output scrolls naturally within the scroll region
+ * @param {string} text - Text to output (can contain newlines)
+ * @param {object} state - Current state for status bar
+ */
+export function printOutput(text, state) {
+  const { rows } = getTermSize();
+  const statusHeight = getStatusHeight(state);
+  
+  // Ensure scroll region is correct
+  if (statusHeight !== currentStatusHeight) {
+    currentStatusHeight = statusHeight;
+    const scrollBottom = rows - currentStatusHeight;
+    process.stdout.write(setScrollRegion(1, scrollBottom));
+  }
+  
+  let out = '';
+  out += hideCursor();
+  out += saveCursor();
+  
+  // Move to bottom of scroll region and print
+  // The scroll region will handle scrolling automatically
+  const scrollBottom = rows - currentStatusHeight;
+  out += moveTo(scrollBottom, 1);
+  out += '\n' + text;  // Newline triggers scroll if needed
+  
+  out += restoreCursor();
+  
+  process.stdout.write(out);
+  
+  // Redraw status bar (it might have been overwritten during scroll)
+  renderStatusOnly(state);
+}
+
+/**
+ * Full render to terminal (legacy - for initial render or full refresh)
+ * @param {object} state - Current state
+ * @param {string[]} output - Output lines to display (ignored in new approach)
+ */
+export function render(state, output = []) {
+  // Just update status bar - output is handled separately via printOutput
+  renderStatusOnly(state);
 }

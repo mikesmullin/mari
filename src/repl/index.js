@@ -5,7 +5,7 @@
 
 import { InputHandler, KEY } from './input.js';
 import { ModeStateMachine, MODE } from './modes.js';
-import { render, clearScreen, showCursor } from './statusbar.js';
+import { render, initTerminal, resetTerminal, printOutput, clearScreen, showCursor } from './statusbar.js';
 import { JogWheelHandler } from './jog.js';
 import { store } from '../commands/store.js';
 import { executeCommand, executeTemplate, isCommandKey, getCommandTemplate } from '../commands/executor.js';
@@ -19,7 +19,6 @@ export class Repl {
     this.input = new InputHandler();
     this.mode = new ModeStateMachine();
     this.jog = new JogWheelHandler();
-    this.output = [];
     this.running = false;
     this.inlineBuffer = ''; // Full inline composition buffer
     this.inputValue = ''; // Current value being typed for a variable
@@ -36,8 +35,8 @@ export class Repl {
     this.input.onKey(this._handleKey.bind(this));
     this.input.start();
     
-    // Initial render first (don't wait for jog wheel)
-    this._render();
+    // Initialize terminal with scroll region
+    initTerminal(this._getState());
     
     // Try to start jog wheel in background (don't block)
     this.jog.start().then(() => {
@@ -57,6 +56,7 @@ export class Repl {
     this.running = false;
     this.input.stop();
     await this.jog.stop();
+    resetTerminal();
     process.stdout.write(clearScreen() + showCursor());
     if (this._resolve) {
       this._resolve();
@@ -584,11 +584,23 @@ export class Repl {
   }
   
   /**
-   * Add output line
+   * Get current state object
+   * @private
+   */
+  _getState() {
+    return {
+      mode: this.mode.getMode(),
+      buffer: this.inlineBuffer || this.mode.getBuffer(),
+      inputVar: this.mode.getInputVar()
+    };
+  }
+  
+  /**
+   * Add output line - prints to terminal and refreshes status bar
    * @private
    */
   _addOutput(line) {
-    this.output.push(line);
+    printOutput(line, this._getState());
   }
   
   /**
@@ -626,12 +638,6 @@ export class Repl {
    * @private
    */
   _render() {
-    const state = {
-      mode: this.mode.getMode(),
-      buffer: this.inlineBuffer || this.mode.getBuffer(),
-      inputVar: this.mode.getInputVar()
-    };
-    
-    render(state, this.output);
+    render(this._getState());
   }
 }
