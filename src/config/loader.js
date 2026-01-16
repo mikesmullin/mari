@@ -1,12 +1,11 @@
 /**
  * Activity file loader
- * Reads YAML activity files from ~/.config/listy/activity/ and ./activity/
+ * Reads YAML activity files from ./activity/
  */
 
-import { readdir, readFile, writeFile, mkdir, copyFile } from 'fs/promises';
+import { readdir, readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
-import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { parseYaml, stringifyYaml } from '../utils/yaml.js';
 import { validateActivity, getDefaultActivity } from './schema.js';
@@ -14,47 +13,23 @@ import { getDefaultValue } from './variables.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..', '..');
-const PROJECT_ACTIVITY_DIR = join(PROJECT_ROOT, 'activity');
-
-const CONFIG_DIR = join(homedir(), '.config', 'listy');
-const ACTIVITY_DIR = join(CONFIG_DIR, 'activity');
+const ACTIVITY_DIR = join(PROJECT_ROOT, 'activity');
 
 /**
- * Ensure config directories exist and copy default activities
+ * Ensure activity directory exists
  */
-export async function ensureConfigDir() {
-  if (!existsSync(CONFIG_DIR)) {
-    await mkdir(CONFIG_DIR, { recursive: true });
-  }
+export async function ensureActivityDir() {
   if (!existsSync(ACTIVITY_DIR)) {
     await mkdir(ACTIVITY_DIR, { recursive: true });
-  }
-  
-  // Copy default activities if config dir is empty
-  try {
-    const configFiles = await readdir(ACTIVITY_DIR);
-    const ymlFiles = configFiles.filter(f => f.endsWith('.yml') || f.endsWith('.yaml'));
-    
-    if (ymlFiles.length === 0 && existsSync(PROJECT_ACTIVITY_DIR)) {
-      const defaultFiles = await readdir(PROJECT_ACTIVITY_DIR);
-      for (const file of defaultFiles.filter(f => f.endsWith('.yml'))) {
-        await copyFile(
-          join(PROJECT_ACTIVITY_DIR, file),
-          join(ACTIVITY_DIR, file)
-        );
-      }
-    }
-  } catch (err) {
-    // Ignore errors during copy
   }
 }
 
 /**
- * Load all activity files from the config directory
+ * Load all activity files from the activity directory
  * @returns {Promise<object[]>} Array of activity objects
  */
 export async function loadActivities() {
-  await ensureConfigDir();
+  await ensureActivityDir();
   
   const activities = [];
   
@@ -135,7 +110,7 @@ export async function saveActivity(activity) {
  * @returns {Promise<object>} Created activity
  */
 export async function createActivity(name, config = {}) {
-  await ensureConfigDir();
+  await ensureActivityDir();
   
   const activity = {
     ...getDefaultActivity(),
@@ -152,14 +127,6 @@ export async function createActivity(name, config = {}) {
   await writeFile(filePath, yaml, 'utf8');
   
   return activity;
-}
-
-/**
- * Get the config directory path
- * @returns {string} Config directory path
- */
-export function getConfigDir() {
-  return CONFIG_DIR;
 }
 
 /**

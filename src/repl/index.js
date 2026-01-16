@@ -35,12 +35,13 @@ export class Repl {
     this.input.onKey(this._handleKey.bind(this));
     this.input.start();
     
-    // Try to start jog wheel
-    await this.jog.start();
-    this.jog.onJog(this._handleJog.bind(this));
-    
-    // Initial render
+    // Initial render first (don't wait for jog wheel)
     this._render();
+    
+    // Try to start jog wheel in background (don't block)
+    this.jog.start().then(() => {
+      this.jog.onJog(this._handleJog.bind(this));
+    });
     
     // Keep running
     return new Promise((resolve) => {
@@ -51,10 +52,10 @@ export class Repl {
   /**
    * Stop the REPL
    */
-  stop() {
+  async stop() {
     this.running = false;
     this.input.stop();
-    this.jog.stop();
+    await this.jog.stop();
     process.stdout.write(clearScreen() + showCursor());
     if (this._resolve) {
       this._resolve();
@@ -67,9 +68,6 @@ export class Repl {
    */
   async _handleKey(key) {
     if (!this.running) return;
-    
-    // Debug: show what key was received
-    this._addOutput(`Key: type=${key.type} key=${JSON.stringify(key.key)}`);
     
     // Global: Ctrl+C / Ctrl+D to exit
     if (key.type === 'ctrl' && (key.key === 'c' || key.key === 'd')) {
@@ -144,7 +142,7 @@ export class Repl {
       const varInfo = store.findByHotkey(key.key);
       if (varInfo) {
         this.mode.toInput(varInfo.name);
-        this.inlineBuffer = key.key;
+        this.inlineBuffer = '';
         this.inputValue = '';
         return;
       }
@@ -263,16 +261,6 @@ export class Repl {
         this._commitInputValue(varName, def);
         // Start new variable
         this.mode.toInput(nextVar.name);
-        this.inlineBuffer += key.key;
-        this.inputValue = '';
-        return;
-      }
-      
-      // Check for command key (commit and execute)
-      if (isCommandKey(key.key)) {
-        this._commitInputValue(varName, def);
-        await this._executeCurrentCommand(key.key);
-        this.mode.toNormal();
         this.inlineBuffer = '';
         this.inputValue = '';
         return;

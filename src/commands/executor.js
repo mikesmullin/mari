@@ -95,8 +95,8 @@ export async function executeTemplate(template, input = '', options = {}) {
   // Substitute variables
   const command = substitute(template, formatted, input);
   
-  // Execute with full stdio forwarding
-  const result = await execute(command, options);
+  // Execute and capture output
+  const result = await executeCapture(command, options);
   return { ...result, command };
 }
 
