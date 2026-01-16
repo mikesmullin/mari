@@ -61,6 +61,7 @@ export async function runRepl(options = {}) {
   
   const repl = new Repl();
   await repl.start();
+  process.exit(0);
 }
 
 /**

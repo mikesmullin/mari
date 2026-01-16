@@ -138,6 +138,12 @@ export class Repl {
       return;
     }
     
+    // ? - show available commands
+    if (key.type === 'char' && key.key === '?') {
+      this._showHelp();
+      return;
+    }
+    
     // $ - enter VAR EDIT mode for first variable
     if (key.type === 'char' && key.key === '$') {
       const firstVar = store.getFirstVariable();
@@ -573,6 +579,7 @@ export class Repl {
       : decrementValue(current, def);
     
     store.set(varName, newVal);
+    this._updateInputBufferFromVar(varName, def);
     this._render();
   }
   
@@ -584,6 +591,36 @@ export class Repl {
     this.output.push(line);
   }
   
+  /**
+   * Show help - display available commands
+   * @private
+   */
+  _showHelp() {
+    const activityData = store.getCurrentActivity();
+    if (!activityData || !activityData.activity) return;
+    
+    const { commands, aliases } = activityData.activity;
+    
+    this._addOutput('');
+    this._addOutput('Commands:');
+    
+    if (commands) {
+      for (const [key, cmd] of Object.entries(commands)) {
+        this._addOutput(`  ${key}  ${cmd}`);
+      }
+    }
+    
+    if (aliases && Object.keys(aliases).length > 0) {
+      this._addOutput('');
+      this._addOutput('Aliases:');
+      for (const [alias, target] of Object.entries(aliases)) {
+        this._addOutput(`  ${alias} -> ${target}`);
+      }
+    }
+    
+    this._addOutput('');
+  }
+
   /**
    * Render the screen
    * @private
