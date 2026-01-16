@@ -274,28 +274,10 @@ export class Repl {
       return;
     }
     
-    // + or = key - increment
-    if (key.type === 'char' && (key.key === '+' || key.key === '=')) {
-      const current = store.get(varName);
-      const newVal = incrementValue(current, def);
-      store.set(varName, newVal);
-      this._updateInputBufferFromVar(varName, def);
-      return;
-    }
-    
-    // - or _ key - decrement
-    if (key.type === 'char' && (key.key === '-' || key.key === '_')) {
-      const current = store.get(varName);
-      const newVal = decrementValue(current, def);
-      store.set(varName, newVal);
-      this._updateInputBufferFromVar(varName, def);
-      return;
-    }
-    
     // Arrow keys for navigation and inc/dec
     if (key.type === 'arrow') {
       if (key.key === 'up') {
-        // Up arrow - increment (same as +)
+        // Up arrow - increment value
         const current = store.get(varName);
         const newVal = incrementValue(current, def);
         store.set(varName, newVal);
@@ -303,7 +285,7 @@ export class Repl {
         return;
       }
       if (key.key === 'down') {
-        // Down arrow - decrement (same as -)
+        // Down arrow - decrement value
         const current = store.get(varName);
         const newVal = decrementValue(current, def);
         store.set(varName, newVal);
@@ -339,16 +321,11 @@ export class Repl {
       return;
     }
     
-    // Check for variable hotkey (switch to that variable)
+    // Regular character - add to input value and update var in real-time
+    // Note: Variable hotkeys are intentionally NOT checked here.
+    // In VAR EDIT mode, all character input goes to the input buffer.
+    // Hotkeys to switch variables only work from NORMAL mode.
     if (key.type === 'char') {
-      const nextVar = store.findByHotkey(key.key);
-      if (nextVar) {
-        // When selecting via hotkey, start with blank input for faster editing
-        this._selectVar(nextVar.name, { blank: true });
-        return;
-      }
-      
-      // Regular character - add to input value and update var in real-time
       this.inputValue += key.key;
       this.inlineBuffer = this.inputValue;
       this._applyInputValue(varName, def);
