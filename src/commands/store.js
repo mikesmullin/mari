@@ -265,6 +265,17 @@ export class VariableStore {
   }
   
   /**
+   * Get activity index in sorted list
+   * @param {string} name - Activity name
+   * @returns {number} Index (0-based)
+   */
+  getActivityIndex(name) {
+    const names = this.getActivityNames();
+    const idx = names.indexOf(name);
+    return idx >= 0 ? idx : 0;
+  }
+  
+  /**
    * Get next activity name (cyclic)
    * @returns {string|null} Next activity name
    */

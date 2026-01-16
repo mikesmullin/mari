@@ -43,6 +43,45 @@ const BG_COLORS = {
 };
 
 /**
+ * Parse hex color to RGB values
+ * @param {string} hex - Hex color string (e.g., "#3a86ff" or "3a86ff")
+ * @returns {{r: number, g: number, b: number}|null} RGB values or null if invalid
+ */
+function parseHexColor(hex) {
+  const match = hex.match(/^#?([0-9a-fA-F]{6})$/);
+  if (!match) return null;
+  
+  const hexValue = match[1];
+  return {
+    r: parseInt(hexValue.slice(0, 2), 16),
+    g: parseInt(hexValue.slice(2, 4), 16),
+    b: parseInt(hexValue.slice(4, 6), 16),
+  };
+}
+
+/**
+ * Get background color ANSI code
+ * Supports named colors and hex format (e.g., "#3a86ff")
+ * @param {string} color - Color name or hex value
+ * @returns {string} ANSI escape sequence
+ */
+function getBgColor(color) {
+  if (!color) return BG_COLORS.blue;
+  
+  // Check for hex format
+  if (color.startsWith('#') || /^[0-9a-fA-F]{6}$/.test(color)) {
+    const rgb = parseHexColor(color);
+    if (rgb) {
+      // ANSI 24-bit color: ESC[48;2;R;G;Bm
+      return `${ESC}[48;2;${rgb.r};${rgb.g};${rgb.b}m`;
+    }
+  }
+  
+  // Named color
+  return BG_COLORS[color] || BG_COLORS.blue;
+}
+
+/**
  * Get terminal dimensions
  * @returns {{cols: number, rows: number}}
  */
@@ -98,11 +137,11 @@ export function clearScreen() {
 /**
  * Format the activity badge
  * @param {string} name - Activity name
- * @param {string} color - Background color name (optional)
+ * @param {string} color - Background color name or hex value (optional)
  * @returns {string} Formatted badge
  */
 function formatActivityBadge(name, color = 'blue') {
-  const bgColor = BG_COLORS[color] || BG_COLORS.blue;
+  const bgColor = getBgColor(color);
   return `${BOLD}${bgColor}${FG_WHITE} ${name || 'none'} ${RESET}`;
 }
 
@@ -135,11 +174,12 @@ function formatVariables(activeVar) {
   const data = store.getCurrentActivity();
   if (!data) return '';
   
+  const hotkeyBg = getBgColor('#3a86ff');
   const parts = [];
   for (const [name, def] of Object.entries(data.definitions)) {
     const value = data.values[name];
     const formatted = formatValue(value, def);
-    const hotkey = def.hotkey ? `${BG_COLORS.blue}${FG_WHITE}${def.hotkey}${RESET} ` : '';
+    const hotkey = def.hotkey ? `${hotkeyBg}${FG_WHITE}${def.hotkey}${RESET} ` : '';
     
     if (name === activeVar) {
       parts.push(`${hotkey}${INVERT}${name}:${formatted}${RESET}`);
@@ -231,6 +271,12 @@ function formatStatusTemplate(template, values, defs) {
   return result;
 }
 
+// Default color palette for activities without explicit color
+const DEFAULT_ACTIVITY_COLORS = [
+  "#005f73", "#0a9396", "#94d2bd", "#e9d8a6", "#ee9b00", 
+  "#ca6702", "#bb3e03", "#ae2012", "#9b2226", "#001219",
+];
+
 /**
  * Render the statusbar
  * @param {object} state - Current state
@@ -240,7 +286,13 @@ export function renderStatusbar(state) {
   const { cols, rows } = getTermSize();
   const activityName = store.getCurrentActivityName();
   const activityData = store.getCurrentActivity();
-  const activityColor = activityData?.activity?.color || 'blue';
+  
+  // Use explicit color or default based on activity index
+  let activityColor = activityData?.activity?.color;
+  if (!activityColor) {
+    const activityIndex = store.getActivityIndex(activityName);
+    activityColor = DEFAULT_ACTIVITY_COLORS[activityIndex % DEFAULT_ACTIVITY_COLORS.length];
+  }
   
   // Build components
   const activity = formatActivityBadge(activityName, activityColor);
