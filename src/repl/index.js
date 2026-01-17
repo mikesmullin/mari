@@ -377,6 +377,7 @@ export class Repl {
    */
   _updateInputBufferFromVar(varName, def) {
     const value = store.get(varName);
+    // Input buffer should be empty for undefined values (not show "(undefined)")
     const formatted = formatValue(value, def);
     this.inputValue = formatted;
     this.inlineBuffer = formatted;
@@ -388,7 +389,8 @@ export class Repl {
    */
   _applyInputValue(varName, def) {
     if (this.inputValue === '') {
-      // Empty input - don't update var
+      // Empty input - set variable to undefined
+      store.set(varName, undefined);
       return;
     }
     const parsed = parseValue(this.inputValue, def);
@@ -690,12 +692,23 @@ export class Repl {
     
     const { commands, aliases } = activityData.activity;
     
+    // Get current variable values, filtering out undefined/empty
+    const values = activityData.values || {};
+    const definedValues = {};
+    for (const [name, val] of Object.entries(values)) {
+      if (val !== undefined && val !== null && val !== '') {
+        definedValues[name] = val;
+      }
+    }
+    
     this._addOutput('');
     this._addOutput('Commands:');
     
     if (commands) {
       for (const [key, cmd] of Object.entries(commands)) {
-        this._addOutput(`  ${key}  ${cmd}`);
+        // Substitute defined variables, leave undefined as-is
+        const expanded = this._substituteForHelp(cmd, definedValues);
+        this._addOutput(`  ${key}  ${expanded}`);
       }
     }
     
@@ -708,6 +721,30 @@ export class Repl {
     }
     
     this._addOutput('');
+  }
+  
+  /**
+   * Substitute variables for help display
+   * Only replaces variables that have defined values
+   * @param {string} template - Command template
+   * @param {object} values - Variable values (only defined ones)
+   * @returns {string} Substituted string
+   * @private
+   */
+  _substituteForHelp(template, values) {
+    let result = template;
+    
+    // Replace ${VAR} syntax - only if value is defined
+    result = result.replace(/\$\{([A-Z_][A-Z0-9_]*)\}/g, (match, name) => {
+      return values.hasOwnProperty(name) ? String(values[name]) : match;
+    });
+    
+    // Replace $VAR syntax (word boundary) - only if value is defined
+    result = result.replace(/\$([A-Z_][A-Z0-9_]*)\b/g, (match, name) => {
+      return values.hasOwnProperty(name) ? String(values[name]) : match;
+    });
+    
+    return result;
   }
 
   /**

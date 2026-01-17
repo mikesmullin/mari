@@ -229,7 +229,7 @@ function formatVariables(activeVar) {
   const parts = [];
   for (const [name, def] of Object.entries(data.definitions)) {
     const value = data.values[name];
-    const formatted = formatValue(value, def);
+    const formatted = formatValue(value, def, { forDisplay: true });
     const hotkey = def.hotkey ? `${hotkeyBg}${FG_WHITE}${def.hotkey}${RESET} ` : '';
     
     if (name === activeVar) {

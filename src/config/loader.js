@@ -122,9 +122,14 @@ export async function persistVariableValues(activity) {
   if (parsed.variables && activity._values) {
     for (const [name, value] of Object.entries(activity._values)) {
       if (parsed.variables[name]) {
-        // Set 'value' as a literal (not a JS expression)
-        const def = parsed.variables[name];
-        parsed.variables[name].value = formatLiteralValue(value, def);
+        // Handle undefined/null - delete the value key from YAML
+        if (value === undefined || value === null || value === '') {
+          delete parsed.variables[name].value;
+        } else {
+          // Set 'value' as a literal (not a JS expression)
+          const def = parsed.variables[name];
+          parsed.variables[name].value = formatLiteralValue(value, def);
+        }
       }
     }
   }

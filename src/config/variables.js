@@ -129,11 +129,12 @@ export function parseValue(input, def) {
  * Format a value for display
  * @param {any} value - Value to format
  * @param {object} def - Variable definition
+ * @param {object} options - Options { forDisplay: boolean }
  * @returns {string} Formatted string
  */
-export function formatValue(value, def) {
-  if (value === null || value === undefined) {
-    return '';
+export function formatValue(value, def, options = {}) {
+  if (value === null || value === undefined || value === '') {
+    return options.forDisplay ? '(undefined)' : '';
   }
   
   switch (def.type) {
