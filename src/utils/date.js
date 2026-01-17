@@ -22,8 +22,8 @@ export function formatDate(date, pattern = 'M/d') {
   let result = pattern;
   
   // Order matters: longer tokens first
-  result = result.replace(/yyyy/g, String(year));
-  result = result.replace(/yy/g, String(yearShort).padStart(2, '0'));
+  result = result.replace(/yyyy/ig, String(year));
+  result = result.replace(/yy/ig, String(yearShort).padStart(2, '0'));
   result = result.replace(/MM/g, String(month).padStart(2, '0'));
   result = result.replace(/M/g, String(month));
   result = result.replace(/dd/g, String(day).padStart(2, '0'));

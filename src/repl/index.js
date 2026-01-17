@@ -726,6 +726,7 @@ export class Repl {
   /**
    * Substitute variables for help display
    * Only replaces variables that have defined values
+   * Supports $VAR:type:format syntax (e.g., $SINCE:date:YYYY-MM-dd)
    * @param {string} template - Command template
    * @param {object} values - Variable values (only defined ones)
    * @returns {string} Substituted string
@@ -733,6 +734,18 @@ export class Repl {
    */
   _substituteForHelp(template, values) {
     let result = template;
+    
+    // Replace $VAR:type:format syntax (e.g., $SINCE:date:YYYY-MM-dd)
+    result = result.replace(/\$([A-Z_][A-Z0-9_]*):(\w+):([^\s"']+)/g, (match, name, type, format) => {
+      if (!values.hasOwnProperty(name)) return match;
+      return this._formatWithSpec(values[name], type, format);
+    });
+    
+    // Replace ${VAR:type:format} syntax
+    result = result.replace(/\$\{([A-Z_][A-Z0-9_]*):(\w+):([^}]+)\}/g, (match, name, type, format) => {
+      if (!values.hasOwnProperty(name)) return match;
+      return this._formatWithSpec(values[name], type, format);
+    });
     
     // Replace ${VAR} syntax - only if value is defined
     result = result.replace(/\$\{([A-Z_][A-Z0-9_]*)\}/g, (match, name) => {
@@ -745,6 +758,48 @@ export class Repl {
     });
     
     return result;
+  }
+  
+  /**
+   * Format a value with a type and format specifier
+   * @param {any} value - The value to format
+   * @param {string} type - The type (e.g., 'date')
+   * @param {string} format - The format string (e.g., 'YYYY-MM-dd')
+   * @returns {string} Formatted value
+   * @private
+   */
+  _formatWithSpec(value, type, format) {
+    if (value === null || value === undefined || value === '') {
+      return '';
+    }
+    
+    switch (type) {
+      case 'date': {
+        // Convert to Date if it's a string (e.g., ISO string)
+        let date = value;
+        if (typeof value === 'string') {
+          date = new Date(value);
+        }
+        if (date instanceof Date && !isNaN(date.getTime())) {
+          // Import formatDate dynamically would be complex, so inline the logic
+          const year = date.getFullYear();
+          const month = date.getMonth() + 1;
+          const day = date.getDate();
+          let result = format;
+          result = result.replace(/YYYY/g, String(year));
+          result = result.replace(/yyyy/g, String(year));
+          result = result.replace(/yy/g, String(year % 100).padStart(2, '0'));
+          result = result.replace(/MM/g, String(month).padStart(2, '0'));
+          result = result.replace(/M/g, String(month));
+          result = result.replace(/dd/g, String(day).padStart(2, '0'));
+          result = result.replace(/d/g, String(day));
+          return result;
+        }
+        return String(value);
+      }
+      default:
+        return String(value);
+    }
   }
 
   /**
