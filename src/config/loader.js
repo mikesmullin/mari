@@ -5,7 +5,7 @@
 
 import { readdir, readFile, writeFile, mkdir, truncate, appendFile } from 'fs/promises';
 import { existsSync, createWriteStream } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { parseYaml, stringifyYaml } from '../utils/yaml.js';
 import { validateActivity, getDefaultActivity } from './schema.js';
@@ -113,10 +113,20 @@ export async function loadActivities() {
         // Add file path for persistence
         activity._filePath = filePath;
         
-        // Validate
+        // Validate schema
         const validation = validateActivity(activity);
         if (!validation.valid) {
           console.error(`Warning: ${file} has errors:`, validation.errors);
+        }
+        
+        // Validate hotkey conflicts
+        const hotkeyConflicts = validateHotkeyConflicts(activity, content, filePath);
+        if (hotkeyConflicts.length > 0) {
+          for (const conflict of hotkeyConflicts) {
+            console.error(`Error: Hotkey conflict in ${conflict.file}:${conflict.line1} and ${conflict.file}:${conflict.line2}`);
+            console.error(`  Hotkey '${conflict.hotkey}' is used by both ${conflict.type1} '${conflict.name1}' and ${conflict.type2} '${conflict.name2}'`);
+          }
+          process.exit(1);
         }
         
         // Initialize runtime values
@@ -136,6 +146,157 @@ export async function loadActivities() {
   activities.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   
   return activities;
+}
+
+/**
+ * Validate that no hotkeys conflict within an activity
+ * @param {object} activity - Parsed activity object
+ * @param {string} content - Raw file content (for line number lookup)
+ * @param {string} filePath - File path for error messages
+ * @returns {Array} Array of conflict objects, empty if no conflicts
+ */
+function validateHotkeyConflicts(activity, content, filePath) {
+  const conflicts = [];
+  const hotkeyMap = new Map(); // hotkey -> { type, name, line }
+  
+  const lines = content.split('\n');
+  // Use path relative to project root (e.g., 'activity/discord.yml')
+  const relativeFilePath = relative(PROJECT_ROOT, filePath);
+  
+  /**
+   * Find line number for a hotkey definition
+   * @param {string} section - 'commands' or 'variables'
+   * @param {string} name - Command key or variable name
+   * @param {string} hotkey - The hotkey value (for variables)
+   * @returns {number} Line number (1-indexed)
+   */
+  function findLineNumber(section, name, hotkey = null) {
+    let inSection = false;
+    let inItem = false;
+    let itemStartLine = 0;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      
+      // Check for section start (top-level key ending with colon, no leading whitespace)
+      if (!line.startsWith(' ') && !line.startsWith('\t')) {
+        if (trimmed.startsWith(`${section}:`)) {
+          inSection = true;
+          inItem = false;
+          continue;
+        } else if (/^\w+:/.test(trimmed)) {
+          // Another top-level section
+          inSection = false;
+          inItem = false;
+          continue;
+        }
+      }
+      
+      if (!inSection) continue;
+      
+      if (section === 'commands') {
+        // Commands: look for "key: command" pattern (indented)
+        // Match patterns like: P:, "P":, 'P':
+        const cmdMatch = trimmed.match(/^(['"]?)([^'":\s]+)\1\s*:/);
+        if (cmdMatch && cmdMatch[2] === name) {
+          return i + 1;
+        }
+      } else if (section === 'variables') {
+        // Variables: look for variable name (indented, but less than nested properties)
+        // Variable names are typically at 2-space indent, properties at 4-space
+        const indent = line.match(/^(\s*)/)[1].length;
+        
+        // Variable name line (2-space indent typically, upper-case names)
+        // Only match at the variable level (indent 2), not property level (indent 4+)
+        if (indent > 0 && indent <= 2) {
+          const varMatch = trimmed.match(/^([A-Z_][A-Z0-9_]*)\s*:/);
+          if (varMatch) {
+            if (varMatch[1] === name) {
+              inItem = true;
+              itemStartLine = i + 1;
+              continue;
+            } else if (inItem) {
+              // We've moved to a different variable
+              inItem = false;
+            }
+          }
+        }
+        
+        // Look for hotkey line within this variable (indent 4+)
+        if (inItem && indent > 2) {
+          // Match: hotkey: n OR hotkey: "n"
+          const hotkeyMatch = trimmed.match(/^hotkey\s*:\s*["']?(\w)["']?/);
+          if (hotkeyMatch) {
+            return i + 1;
+          }
+        }
+      }
+    }
+    
+    // If we found the item but not the specific hotkey line, return the item start
+    if (section === 'variables' && itemStartLine > 0) {
+      return itemStartLine;
+    }
+    
+    return 0; // Not found
+  }
+  
+  // Collect command hotkeys (command keys are the hotkeys)
+  if (activity.commands) {
+    for (const [key, _cmd] of Object.entries(activity.commands)) {
+      const line = findLineNumber('commands', key);
+      const entry = { type: 'command', name: key, line };
+      
+      if (hotkeyMap.has(key)) {
+        const existing = hotkeyMap.get(key);
+        conflicts.push({
+          file: relativeFilePath,
+          hotkey: key,
+          type1: existing.type,
+          name1: existing.name,
+          line1: existing.line,
+          type2: entry.type,
+          name2: entry.name,
+          line2: entry.line
+        });
+      } else {
+        hotkeyMap.set(key, entry);
+      }
+    }
+  }
+  
+  // Collect variable hotkeys
+  if (activity.variables) {
+    for (const [name, def] of Object.entries(activity.variables)) {
+      if (def.hotkey) {
+        const hotkey = def.hotkey;
+        const line = findLineNumber('variables', name, hotkey);
+        const entry = { type: 'variable', name, line };
+        
+        if (hotkeyMap.has(hotkey)) {
+          const existing = hotkeyMap.get(hotkey);
+          conflicts.push({
+            file: relativeFilePath,
+            hotkey,
+            type1: existing.type,
+            name1: existing.name,
+            line1: existing.line,
+            type2: entry.type,
+            name2: entry.name,
+            line2: entry.line
+          });
+        } else {
+          hotkeyMap.set(hotkey, entry);
+        }
+      }
+    }
+  }
+  
+  return conflicts;
 }
 
 /**
