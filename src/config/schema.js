@@ -46,6 +46,9 @@ export function validateActivity(activity) {
           if (cmd.llm_prepend !== undefined && typeof cmd.llm_prepend !== 'string') {
             errors.push(`Command "${key}.llm_prepend" must be a string`);
           }
+          if (cmd.description !== undefined && typeof cmd.description !== 'string') {
+            errors.push(`Command "${key}.description" must be a string`);
+          }
         } else {
           errors.push(`Command "${key}" must be a string or object with shell property`);
         }

@@ -1127,10 +1127,15 @@ export class Repl {
     this._addOutput('Commands:');
     
     if (commands) {
-      for (const [key, cmd] of Object.entries(commands)) {
+      for (const [key, cmdDef] of Object.entries(commands)) {
+        // Get the command template (string or object with shell property)
+        const cmd = typeof cmdDef === 'string' ? cmdDef : cmdDef.shell;
         // Substitute defined variables, leave undefined as-is
         const expanded = this._substituteForHelp(cmd, definedValues);
-        this._addOutput(`  ${key}  ${expanded}`);
+        // Get optional description
+        const description = typeof cmdDef === 'object' ? cmdDef.description : null;
+        const descSuffix = description ? `  # ${description}` : '';
+        this._addOutput(`  ${key}  ${expanded}${descSuffix}`);
       }
     }
     
