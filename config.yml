@@ -5,7 +5,7 @@
 # $_BUFFER is the path to buffer.log (scrollback capture)
 # $_AGENT is the agent name, parsed from @agent prefix or default_agent if not specified
 #   e.g. input "@solo what is 2+2?" sets $_AGENT=solo, $*="what is 2+2?"
-default_agent: text
+default_agent: mini-solo
 llm_shell: cat $_BUFFER | subd -i -t "$_AGENT" "$*"
 
 # Flash message timing: milliseconds per character
