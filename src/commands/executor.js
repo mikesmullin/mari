@@ -41,17 +41,29 @@ export async function execute(command, options = {}) {
  * Also appends output to buffer.log for LLM context
  * @param {string} command - Command string to execute
  * @param {object} options - Execution options
+ * @param {boolean} options.inheritStdin - Whether to inherit stdin (default: false for non-interactive commands)
  * @returns {Promise<{code: number, stdout: string, stderr: string}>}
  */
 export async function executeCapture(command, options = {}) {
+  // By default, don't inherit stdin for non-interactive commands
+  // This allows Ctrl+C to be handled by the REPL rather than going to the child
+  const stdinMode = options.inheritStdin ? 'inherit' : 'pipe';
+  
   return new Promise((resolve) => {
     const proc = spawn('sh', ['-c', command], {
-      stdio: ['inherit', 'pipe', 'pipe'],
+      stdio: [stdinMode, 'pipe', 'pipe'],
       env: {
         ...process.env,
         ...options.env
-      }
+      },
+      // Create a new process group so we can kill all child processes (including pipelines)
+      detached: true
     });
+    
+    // Close stdin immediately if we're using pipe mode (child doesn't need input)
+    if (stdinMode === 'pipe' && proc.stdin) {
+      proc.stdin.end();
+    }
     
     // Register child process for signal handling (Ctrl+C escalation)
     registerChildProcess(proc, options.onParentExit);

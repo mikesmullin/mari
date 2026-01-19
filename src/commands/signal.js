@@ -35,8 +35,8 @@ export function unregisterChildProcess() {
 /**
  * Handle an interrupt (Ctrl+C) during child process execution
  * Implements escalating behavior:
- * - 1st: SIGINT to child
- * - 2nd: SIGKILL to child  
+ * - 1st: SIGINT to child process group
+ * - 2nd: SIGKILL to child process group
  * - 3rd: Exit parent
  * @returns {boolean} True if handled (child process was running), false otherwise
  */
@@ -48,19 +48,32 @@ export function handleInterrupt() {
   
   interruptCount++;
   
+  // Get process group ID (same as child PID when spawned with detached: true)
+  const pgid = currentChildProcess.pid;
+  
   if (interruptCount === 1) {
-    // First press: forward SIGINT to child
+    // First press: forward SIGINT to entire process group
     try {
-      currentChildProcess.kill('SIGINT');
+      // Negative PID sends signal to entire process group
+      process.kill(-pgid, 'SIGINT');
     } catch (e) {
-      // Child may have already exited
+      // Process group may have already exited, try direct kill
+      try {
+        currentChildProcess.kill('SIGINT');
+      } catch (e2) {
+        // Child may have already exited
+      }
     }
   } else if (interruptCount === 2) {
-    // Second press: send SIGKILL to child
+    // Second press: send SIGKILL to entire process group
     try {
-      currentChildProcess.kill('SIGKILL');
+      process.kill(-pgid, 'SIGKILL');
     } catch (e) {
-      // Child may have already exited
+      try {
+        currentChildProcess.kill('SIGKILL');
+      } catch (e2) {
+        // Child may have already exited
+      }
     }
   } else {
     // Third press: exit parent process
