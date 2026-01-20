@@ -1,6 +1,6 @@
 /**
  * Mode state machine for REPL
- * Modes: NORMAL, CMD, INPUT, AGENT, LLM, SHELL
+ * Modes: NORMAL, CMD, INPUT, AGENT, LLM, SHELL, WORD, VOICE
  */
 
 /**
@@ -12,7 +12,9 @@ export const MODE = {
   INPUT: 'INPUT',
   AGENT: 'AGENT',
   LLM: 'LLM',
-  SHELL: 'SHELL'
+  SHELL: 'SHELL',
+  WORD: 'WORD',
+  VOICE: 'VOICE'
 };
 
 /**
@@ -118,6 +120,24 @@ export class ModeStateMachine {
   }
   
   /**
+   * Transition to WORD mode
+   */
+  toWord() {
+    this.mode = MODE.WORD;
+    this.buffer = '';
+    this._emit('mode', MODE.WORD);
+  }
+  
+  /**
+   * Transition to VOICE mode
+   */
+  toVoice() {
+    this.mode = MODE.VOICE;
+    this.buffer = '';
+    this._emit('mode', MODE.VOICE);
+  }
+  
+  /**
    * Append to buffer (CMD mode)
    * @param {string} char - Character to append
    */
@@ -216,6 +236,10 @@ export class ModeStateMachine {
         return '@' + this.buffer;
       case MODE.SHELL:
         return '!' + this.buffer;
+      case MODE.WORD:
+        return '%' + this.buffer;
+      case MODE.VOICE:
+        return '#' + this.buffer;
       default:
         return this.buffer;
     }

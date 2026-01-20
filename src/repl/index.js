@@ -13,6 +13,7 @@ import { executeCommand, executeTemplate, isCommandKey, getCommandTemplate, exec
 import { parseValue, incrementValue, decrementValue, formatValue } from '../config/variables.js';
 import { persistVariableValues, loadActivities, initBuffer, clearBuffer, closeBuffer, getLlmShellCommand, getDefaultAgent, getFlashMsPerChar, startRound, endRound, undoLastRound, getRoundCount, addLinesToCurrentRound } from '../config/loader.js';
 import { handleInterrupt } from '../commands/signal.js';
+import { VoiceListener } from './voice.js';
 
 /**
  * REPL class
@@ -23,6 +24,7 @@ export class Repl {
     this.mode = new ModeStateMachine();
     this.jog = new JogWheelHandler();
     this.history = new HistoryManager();
+    this.voice = new VoiceListener();
     this.running = false;
     this.inlineBuffer = ''; // Full inline composition buffer
     this.inputValue = ''; // Current value being typed for a variable
@@ -185,6 +187,12 @@ export class Repl {
       case MODE.SHELL:
         await this._handleShellMode(key);
         break;
+      case MODE.WORD:
+        await this._handleWordMode(key);
+        break;
+      case MODE.VOICE:
+        await this._handleVoiceMode(key);
+        break;
     }
     
     this._render();
@@ -283,6 +291,18 @@ export class Repl {
     // ! - enter SHELL mode
     if (key.type === 'char' && key.key === '!') {
       this.mode.toShell();
+      return;
+    }
+    
+    // % - enter WORD mode
+    if (key.type === 'char' && key.key === '%') {
+      this.mode.toWord();
+      return;
+    }
+    
+    // # - enter VOICE mode
+    if (key.type === 'char' && key.key === '#') {
+      await this._enterVoiceMode();
       return;
     }
     
@@ -811,6 +831,255 @@ export class Repl {
       this.mode.appendBuffer(key.key);
       this.inlineBuffer = this.mode.getBuffer();
     }
+  }
+  
+  /**
+   * Handle WORD mode input
+   * User types a word and presses Enter to execute the matching command
+   * Hotkeys are disabled in this mode
+   * @private
+   */
+  async _handleWordMode(key) {
+    // Escape - back to normal
+    if (key.type === 'special' && key.key === 'escape') {
+      this.history.resetNavigation('WORD');
+      this.mode.toNormal();
+      this.inlineBuffer = '';
+      return;
+    }
+    
+    // Enter - try to match word to a command
+    if (key.type === 'special' && key.key === 'enter') {
+      const word = this.mode.getBuffer().trim().toLowerCase();
+      if (word) {
+        // Add to history before execution
+        this.history.add('WORD', word);
+        this.history.resetNavigation('WORD');
+        
+        // Try to find matching command by word
+        const match = this._findCommandByWord(word);
+        
+        if (match) {
+          // Clear buffer before exec starts
+          this.mode.clearBuffer();
+          this.inlineBuffer = '';
+          this._render();
+          
+          // Execute the matched command
+          await this._executeCommandByKey(match.key);
+        } else {
+          showFlashMessage(`No command for word: ${word}`, () => this._render());
+          this.mode.clearBuffer();
+          this.inlineBuffer = '';
+        }
+      }
+      return;
+    }
+    
+    // Arrow up - navigate history (older)
+    if (key.type === 'arrow' && key.key === 'up') {
+      const entry = this.history.navigateUp('WORD', this.mode.getBuffer());
+      if (entry !== null) {
+        this.mode.clearBuffer();
+        for (const ch of entry) {
+          this.mode.appendBuffer(ch);
+        }
+        this.inlineBuffer = this.mode.getBuffer();
+      }
+      return;
+    }
+    
+    // Arrow down - navigate history (newer)
+    if (key.type === 'arrow' && key.key === 'down') {
+      const entry = this.history.navigateDown('WORD');
+      if (entry !== null) {
+        this.mode.clearBuffer();
+        for (const ch of entry) {
+          this.mode.appendBuffer(ch);
+        }
+        this.inlineBuffer = this.mode.getBuffer();
+      }
+      return;
+    }
+    
+    // Backspace
+    if (key.type === 'special' && key.key === 'backspace') {
+      this.mode.backspaceBuffer();
+      this.inlineBuffer = this.mode.getBuffer();
+      return;
+    }
+    
+    // Regular character - append to buffer (no hotkey processing!)
+    if (key.type === 'char') {
+      this.mode.appendBuffer(key.key);
+      this.inlineBuffer = this.mode.getBuffer();
+    }
+  }
+  
+  /**
+   * Handle VOICE mode input
+   * Listens for voice transcriptions and matches them against voice patterns
+   * Only Escape key works to exit; keyboard is otherwise ignored
+   * @private
+   */
+  async _handleVoiceMode(key) {
+    // Escape - stop listening and return to normal
+    if (key.type === 'special' && key.key === 'escape') {
+      await this._exitVoiceMode();
+      return;
+    }
+    
+    // In VOICE mode, all other keys are ignored
+    // Voice input is processed via the VoiceListener polling
+  }
+  
+  /**
+   * Enter VOICE mode and start listening
+   * @private
+   */
+  async _enterVoiceMode() {
+    this.mode.toVoice();
+    this.inlineBuffer = '';
+    
+    // Set up voice handler
+    this.voice.onVoice(this._handleVoiceInput.bind(this));
+    
+    // Start listening
+    await this.voice.start();
+    
+    showFlashMessage('Listening...', () => this._render());
+  }
+  
+  /**
+   * Exit VOICE mode and stop listening
+   * @private
+   */
+  async _exitVoiceMode() {
+    // Stop voice listener
+    this.voice.stop();
+    this.voice.offVoice(this._handleVoiceInput.bind(this));
+    
+    this.mode.toNormal();
+    this.inlineBuffer = '';
+  }
+  
+  /**
+   * Handle voice input from VoiceListener
+   * @param {string} normalized - Normalized text (lowercase, alphanumeric)
+   * @param {string} original - Original transcription
+   * @param {string} timestamp - ISO timestamp
+   * @private
+   */
+  async _handleVoiceInput(normalized, original, timestamp) {
+    // Only process if still in VOICE mode
+    if (this.mode.getMode() !== MODE.VOICE) return;
+    
+    // Show the transcription as a flash message
+    showFlashMessage(`🎤 ${original}`, () => this._render());
+    
+    // Try to match against voice patterns
+    const match = this._findCommandByVoice(normalized);
+    
+    if (match) {
+      // Exit voice mode before executing
+      await this._exitVoiceMode();
+      
+      // Execute the matched command
+      await this._executeCommandByKey(match.key);
+      
+      this._render();
+    }
+  }
+  
+  /**
+   * Find a command by its word property
+   * @param {string} word - The word to match (already lowercase)
+   * @returns {{key: string, cmdDef: object}|null} Matched command or null
+   * @private
+   */
+  _findCommandByWord(word) {
+    const activityData = store.getCurrentActivity();
+    if (!activityData || !activityData.activity) return null;
+    
+    const commands = activityData.activity.commands || {};
+    
+    for (const [key, cmdDef] of Object.entries(commands)) {
+      // Commands can be string (no word) or object with word property
+      if (typeof cmdDef === 'object' && cmdDef.word) {
+        if (cmdDef.word.toLowerCase() === word) {
+          return { key, cmdDef };
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Find a command by its voice pattern (regex)
+   * @param {string} text - Normalized text to match against
+   * @returns {{key: string, cmdDef: object}|null} Matched command or null
+   * @private
+   */
+  _findCommandByVoice(text) {
+    const activityData = store.getCurrentActivity();
+    if (!activityData || !activityData.activity) return null;
+    
+    const commands = activityData.activity.commands || {};
+    
+    for (const [key, cmdDef] of Object.entries(commands)) {
+      // Commands can be object with voice property (regex pattern)
+      if (typeof cmdDef === 'object' && cmdDef.voice) {
+        try {
+          const regex = new RegExp(cmdDef.voice, 'i');
+          if (regex.test(text)) {
+            return { key, cmdDef };
+          }
+        } catch (e) {
+          // Invalid regex - skip
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Execute a command by its key
+   * @param {string} key - Command key
+   * @private
+   */
+  async _executeCommandByKey(key) {
+    const template = getCommandTemplate(key);
+    if (!template) return;
+    
+    // Track last executed command for per-command llm_prepend
+    this.lastCommandKey = key;
+    
+    const expandedCommand = `$ ${this._getExpandedCommand(template, '')}`;
+    
+    // Start a new round for this execution
+    startRound(expandedCommand);
+    
+    this._addOutput(expandedCommand);
+    
+    // Start spinner
+    startSpinner(() => this._render());
+    
+    try {
+      await executeCommand(key, '', {
+        onStdout: (data) => this._addOutput(data.trim()),
+        onStderr: (data) => this._addOutput(data.trim()),
+        onParentExit: () => this._emergencyCleanup()
+      });
+    } finally {
+      // Stop spinner
+      stopSpinner();
+      // End the round
+      endRound();
+    }
+    
+    this._addOutput(''); // Visual break after command
   }
   
   /**

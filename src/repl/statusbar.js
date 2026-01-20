@@ -341,6 +341,10 @@ function formatMode(mode) {
       return `${FG_GREEN}-- LLM --${RESET}`;
     case 'SHELL':
       return `${FG_CYAN}-- SHELL --${RESET}`;
+    case 'WORD':
+      return `${FG_YELLOW}-- WORD --${RESET}`;
+    case 'VOICE':
+      return `${FG_MAGENTA}-- VOICE --${RESET}`;
     default:
       return '';
   }

@@ -15,6 +15,8 @@ Rapid hotkey-driven shell execution.
 - **LLM mode**: Send prompts to a configured LLM with scrollback buffer as context
 - **LLM context chaining**: Activity-controlled LLM context with skills-based pattern matching
 - **SHELL mode**: Execute raw shell commands without leaving the REPL
+- **WORD mode**: Type word commands instead of hotkeys
+- **VOICE mode**: Execute commands via speech using perception-voice service
 - **Persistent values**: Variable values are saved to YAML and restored on restart
 - **Configurable status bar**: Custom status format with variable substitution
 - **Scroll region**: Clean terminal output with fixed status bar
@@ -56,6 +58,8 @@ These work in all modes:
 - `$` - Enter VAR EDIT mode
 - `@` - Enter LLM mode
 - `!` - Enter SHELL mode
+- `%` - Enter WORD mode
+- `#` - Enter VOICE mode
 - `?` - Show available commands
 
 ### VAR EDIT Mode
@@ -81,6 +85,34 @@ The prompt is sent to the command configured in `config.yml`. The scrollback buf
 ### SHELL Mode
 - Type a shell command, `Enter` to execute (stays in SHELL mode)
 - `Escape` - Exit to NORMAL mode
+
+### WORD Mode
+- Type a word and press `Enter` to execute the matching command
+- Hotkeys are disabled in this mode
+- `Escape` - Exit to NORMAL mode
+
+Commands can define a `word` property that matches typed input:
+```yaml
+commands:
+  b:
+    shell: subd -v -t home turn all lights blue
+    word: blue
+```
+In WORD mode, typing `blue` + Enter executes the command.
+
+### VOICE Mode
+- Listens to speech via `perception-voice` service
+- Transcriptions are matched against `voice` regex patterns
+- `Escape` - Exit to NORMAL mode
+
+Commands can define a `voice` property (regex pattern):
+```yaml
+commands:
+  b:
+    shell: subd -v -t home turn all lights blue
+    voice: '(lights|blue)'
+```
+In VOICE mode, saying "turn on the lights" or "make it blue" triggers the command.
 
 ## Global Configuration
 
