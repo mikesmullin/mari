@@ -49,7 +49,8 @@ listy <command> [args...]
 ### Global Hotkeys
 These work in all modes:
 - `Ctrl+L` - Clear screen and buffer
-- `Ctrl+C` / `Ctrl+D` - Exit
+- `Ctrl+C` - Exit (press twice to confirm)
+- `Ctrl+D` - Exit (in VAR EDIT mode: cycle through scrollback selections)
 - `Ctrl+X, u` - Undo last execution round (removes from buffer)
 
 ### NORMAL Mode
@@ -66,8 +67,23 @@ These work in all modes:
 - Variable hotkeys (e.g., `q`, `y`, `t`) - Select and edit variable (blanks input)
 - `←` / `→` - Navigate between variables
 - `↑` / `↓` or `+` / `-` - Increment/decrement value
+- `Ctrl+D` - Cycle through scrollback matches (if variable has `match` pattern)
 - `Enter` - Apply changes and persist to disk
 - `Escape` - Discard changes and exit
+
+#### Scrollback Selection
+
+Variables can define a `match` pattern to extract values from command output:
+
+```yaml
+variables:
+  ID:
+    type: string
+    hotkey: i
+    match: '/\t([a-f0-9]{6})\t/'
+```
+
+In VAR EDIT mode, pressing `Ctrl+D` cycles through regex matches found in the scrollback buffer. The first capture group becomes the variable value, and the matched line is shown in a flash message.
 
 ### CMD Mode
 - `:set VAR VALUE` - Set variable value

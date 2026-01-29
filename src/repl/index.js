@@ -34,6 +34,9 @@ export class Repl {
     this.lastCommandKey = null; // Last executed command key (for per-command llm_prepend)
     this.exitPressCount = 0; // Counter for Ctrl+C presses when no child process
     this.historyLoadedActivities = new Set(); // Track which activities have had history loaded
+    // Selection state for Ctrl+D cycling through scrollback matches
+    this.selectionMatches = []; // Array of {value, line} objects
+    this.selectionIndex = -1; // Current index in selectionMatches (-1 = not started)
   }
   
   /**
@@ -155,8 +158,14 @@ export class Repl {
       return;
     }
     
-    // Global: Ctrl+D to exit
+    // Global: Ctrl+D to exit (except in INPUT mode where it cycles through selections)
     if (key.type === 'ctrl' && key.key === 'd') {
+      if (this.mode.getMode() === MODE.INPUT) {
+        // In INPUT mode, Ctrl+D cycles through scrollback matches
+        await this._cycleSelection();
+        this._render();
+        return;
+      }
       this.stop();
       return;
     }
@@ -351,8 +360,8 @@ export class Repl {
     if (key.type === 'char') {
       const varInfo = store.findByHotkey(key.key);
       if (varInfo) {
-        // When entering via hotkey, start with blank input for faster editing
-        this._enterVarEditMode(varInfo.name, { blank: true });
+        // When entering via hotkey, start with blank input and auto-cycle if match pattern exists
+        await this._enterVarEditMode(varInfo.name, { blank: true, autoCycle: true });
         return;
       }
       
@@ -464,6 +473,7 @@ export class Repl {
         store.restoreValues(this.originalValues);
       }
       this.originalValues = null;
+      this._resetSelection();
       this.mode.toNormal();
       this.inlineBuffer = '';
       this.inputValue = '';
@@ -485,6 +495,7 @@ export class Repl {
       }
       
       this.originalValues = null;
+      this._resetSelection();
       this.mode.toNormal();
       this.inlineBuffer = '';
       this.inputValue = '';
@@ -534,32 +545,43 @@ export class Repl {
         this.inlineBuffer = this.inputValue;
         // Update var in real-time
         this._applyInputValue(varName, def);
+        // Reset selection state so next Ctrl+D rebuilds matches
+        this._resetSelection();
       }
       return;
     }
     
-    // Regular character - add to input value and update var in real-time
-    // Note: Variable hotkeys are intentionally NOT checked here.
-    // In VAR EDIT mode, all character input goes to the input buffer.
-    // Hotkeys to switch variables only work from NORMAL mode.
+    // Regular character - check if it's the current variable's hotkey for cycling
     if (key.type === 'char') {
+      // If the key matches the current variable's hotkey and it has a match pattern,
+      // cycle through selections instead of typing the character
+      if (def.hotkey === key.key && def.match) {
+        await this._cycleSelection();
+        return;
+      }
+      
+      // Otherwise, add to input value and update var in real-time
       this.inputValue += key.key;
       this.inlineBuffer = this.inputValue;
       this._applyInputValue(varName, def);
+      // Reset selection state so next Ctrl+D rebuilds matches
+      this._resetSelection();
     }
   }
   
   /**
    * Enter VAR EDIT mode for a variable
    * @param {string} varName - Variable name
-   * @param {object} options - Options { blank: boolean }
+   * @param {object} options - Options { blank: boolean, autoCycle: boolean }
    * @private
    */
-  _enterVarEditMode(varName, options = {}) {
+  async _enterVarEditMode(varName, options = {}) {
     // Save original values for reverting on ESC
     if (!this.originalValues) {
       this.originalValues = store.snapshotValues();
     }
+    // Reset selection state when entering VAR EDIT mode
+    this._resetSelection();
     this.mode.toInput(varName);
     if (options.blank) {
       // Start with blank input for faster editing
@@ -567,6 +589,14 @@ export class Repl {
       this.inlineBuffer = '';
     } else {
       this._updateInputBufferFromVar(varName, store.getDefinition(varName));
+    }
+    
+    // Auto-cycle through selections if requested and variable has match pattern
+    if (options.autoCycle) {
+      const def = store.getDefinition(varName);
+      if (def && def.match) {
+        await this._cycleSelection();
+      }
     }
   }
   
@@ -578,6 +608,8 @@ export class Repl {
    * @private
    */
   _selectVar(varName, options = {}) {
+    // Reset selection state when switching variables
+    this._resetSelection();
     this.mode.toInput(varName);
     if (options.blank) {
       // Start with blank input for faster editing
@@ -616,6 +648,114 @@ export class Repl {
     }
   }
   
+  /**
+   * Reset selection state (called when entering/leaving INPUT mode or switching variables)
+   * @private
+   */
+  _resetSelection() {
+    this.selectionMatches = [];
+    this.selectionIndex = -1;
+  }
+  
+  /**
+   * Build selection matches from scrollback buffer for current variable
+   * @param {string} matchPattern - The match pattern from variable definition (e.g., '/\t([a-z0-9]{6})\t/')
+   * @returns {Array<{value: string, line: string}>} Array of matches
+   * @private
+   */
+  _buildSelectionMatches(matchPattern) {
+    if (!matchPattern) return [];
+    
+    // Parse the match pattern - it's stored as a string like '/regex/' or '/regex/flags'
+    let regex;
+    try {
+      // Match pattern format: /pattern/ or /pattern/flags
+      const patternMatch = matchPattern.match(/^\/(.*)\/([gimsuvy]*)$/);
+      if (patternMatch) {
+        regex = new RegExp(patternMatch[1], patternMatch[2] || '');
+      } else {
+        // Treat as literal pattern
+        regex = new RegExp(matchPattern);
+      }
+    } catch (e) {
+      // Invalid regex
+      return [];
+    }
+    
+    // Get all rounds from scrollback
+    const rounds = getRounds();
+    const matches = [];
+    const seen = new Set(); // Deduplicate by captured value
+    
+    // Helper to strip ANSI escape codes
+    const stripAnsi = (str) => str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    
+    // Process rounds in order (top to bottom)
+    for (const round of rounds) {
+      // Get all output lines from this round
+      const output = round.getOutput();
+      const lines = output.split('\n');
+      
+      for (const line of lines) {
+        // Strip ANSI codes before matching
+        const cleanLine = stripAnsi(line);
+        const match = cleanLine.match(regex);
+        if (match && match[1]) {
+          // match[1] is the first capture group
+          const value = match[1];
+          if (!seen.has(value)) {
+            seen.add(value);
+            // Store the cleaned line for display
+            matches.push({ value, line: cleanLine.trim() });
+          }
+        }
+      }
+    }
+    
+    return matches;
+  }
+  
+  /**
+   * Cycle through selection matches (called on Ctrl+D in INPUT mode)
+   * @private
+   */
+  async _cycleSelection() {
+    const varName = this.mode.getInputVar();
+    const def = store.getDefinition(varName);
+    
+    if (!def || !def.match) {
+      showFlashMessage('No match pattern defined for this variable', () => this._render());
+      return;
+    }
+    
+    // Build matches on first Ctrl+D press (when index is -1)
+    if (this.selectionIndex === -1) {
+      this.selectionMatches = this._buildSelectionMatches(def.match);
+    }
+    
+    if (this.selectionMatches.length === 0) {
+      showFlashMessage('No matches found in scrollback', () => this._render());
+      return;
+    }
+    
+    // Cycle to next match (with wrap-around)
+    this.selectionIndex = (this.selectionIndex + 1) % this.selectionMatches.length;
+    
+    const current = this.selectionMatches[this.selectionIndex];
+    
+    // Update input buffer with matched value
+    this.inputValue = current.value;
+    this.inlineBuffer = current.value;
+    
+    // Apply the value to the variable
+    this._applyInputValue(varName, def);
+    
+    // Show flash message with the matched line
+    const matchNum = this.selectionIndex + 1;
+    const total = this.selectionMatches.length;
+    showFlashMessage(`[${matchNum}/${total}] ${current.line}`, () => this._render());
+  }
+
   /**
    * Handle AGENT mode input
    * @private
