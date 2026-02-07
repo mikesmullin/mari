@@ -187,9 +187,6 @@ export class Repl {
       case MODE.INPUT:
         await this._handleInputMode(key);
         break;
-      case MODE.AGENT:
-        await this._handleAgentMode(key);
-        break;
       case MODE.LLM:
         await this._handleLlmMode(key);
         break;
@@ -334,12 +331,6 @@ export class Repl {
       await this._enterVoiceMode();
       return;
     }
-    
-    // A - enter AGENT mode (disabled for now)
-    // if (key.type === 'char' && key.key === 'A') {
-    //   this.mode.toAgent();
-    //   return;
-    // }
     
     // ? - show available commands
     if (key.type === 'char' && key.key === '?') {
@@ -754,22 +745,6 @@ export class Repl {
     const matchNum = this.selectionIndex + 1;
     const total = this.selectionMatches.length;
     showFlashMessage(`[${matchNum}/${total}] ${current.line}`, () => this._render());
-  }
-
-  /**
-   * Handle AGENT mode input
-   * @private
-   */
-  async _handleAgentMode(key) {
-    // Escape - back to normal
-    if (key.type === 'special' && key.key === 'escape') {
-      this.mode.toNormal();
-      return;
-    }
-    
-    // For now, just show placeholder
-    this._addOutput('AGENT mode: Not yet implemented');
-    this.mode.toNormal();
   }
   
   /**

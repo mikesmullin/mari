@@ -294,7 +294,7 @@ The statusbar is always visible at the bottom and arranged as:
 │                (limbo - ignores most input)                     │
 │                                                                 │
 │   Press `:` ─────────────────► CMD MODE                         │
-│   Press `A` ─────────────────► AGENT MODE                       │
+│   Press `@` ─────────────────► LLM MODE                         │
 │   Press `Tab` ───────────────► Rotate to next activity          │
 │   Press var hotkey ──────────► Begin inline variable input      │
 │   Press cmd hotkey ──────────► Execute command (immediate)      │
@@ -309,7 +309,7 @@ The statusbar is always visible at the bottom and arranged as:
 | NORMAL    | (default)     | Idle state; hotkey dispatch                  | —             |
 | CMD       | `:`           | Execute commands, set variables              | `Esc`/`Enter` |
 | INPUT     | var hotkey    | Inline variable entry (jog/+/-/type active)  | value or cmd  |
-| AGENT     | `A`           | AI agent interaction (future)                | `Esc`         |
+| LLM       | `@`           | Send prompts to LLM with buffer context      | `Esc`         |
 
 ---
 
@@ -726,7 +726,7 @@ mari/
 │   ├── index.js            # Main dispatcher
 │   ├── repl/
 │   │   ├── index.js        # REPL loop
-│   │   ├── modes.js        # Mode state machine (NORMAL, CMD, VAR_EDIT, AGENT)
+│   │   ├── modes.js        # Mode state machine (NORMAL, CMD, VAR_EDIT, LLM)
 │   │   ├── statusbar.js    # Bottom statusbar rendering
 │   │   ├── input.js        # Raw stdin handler
 │   │   └── jog.js          # Jog wheel MIDI input handler

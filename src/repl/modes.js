@@ -1,6 +1,6 @@
 /**
  * Mode state machine for REPL
- * Modes: NORMAL, CMD, INPUT, AGENT, LLM, SHELL, WORD, VOICE
+ * Modes: NORMAL, CMD, INPUT, LLM, SHELL, WORD, VOICE
  */
 
 /**
@@ -10,7 +10,6 @@ export const MODE = {
   NORMAL: 'NORMAL',
   CMD: 'CMD',
   INPUT: 'INPUT',
-  AGENT: 'AGENT',
   LLM: 'LLM',
   SHELL: 'SHELL',
   WORD: 'WORD',
@@ -90,15 +89,6 @@ export class ModeStateMachine {
     this.inputVar = varName;
     this.inputBuffer = '';
     this._emit('mode', MODE.INPUT);
-  }
-  
-  /**
-   * Transition to AGENT mode
-   */
-  toAgent() {
-    this.mode = MODE.AGENT;
-    this.buffer = '';
-    this._emit('mode', MODE.AGENT);
   }
   
   /**
