@@ -151,7 +151,8 @@ export function formatValue(value, def, options = {}) {
       
     case 'date':
       if (value instanceof Date) {
-        return formatDate(value, def.format || 'M/d');
+        const fmt = (!options.forDisplay && def.shellFormat) ? def.shellFormat : (def.format || 'M/d');
+        return formatDate(value, fmt);
       }
       return String(value);
       

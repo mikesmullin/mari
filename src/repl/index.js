@@ -1536,11 +1536,14 @@ export class Repl {
     const { commands, aliases } = activityData.activity;
     
     // Get current variable values, filtering out undefined/empty
+    // Pre-format using formatValue (respects shellFormat) so display matches execution
     const values = activityData.values || {};
+    const definitions = store.getAllDefinitions();
     const definedValues = {};
     for (const [name, val] of Object.entries(values)) {
       if (val !== undefined && val !== null && val !== '') {
-        definedValues[name] = val;
+        const def = definitions[name];
+        definedValues[name] = def ? formatValue(val, def) : String(val);
       }
     }
     
