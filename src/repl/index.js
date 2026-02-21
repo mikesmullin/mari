@@ -62,6 +62,9 @@ export class Repl {
     // Initialize terminal with scroll region
     initTerminal(this._getState());
     
+    // Clear screen on startup (same as Ctrl+L)
+    await this._clearScreen();
+    
     // Try to start jog wheel in background (don't block)
     this.jog.start().then(() => {
       this.jog.onJog(this._handleJog.bind(this));
