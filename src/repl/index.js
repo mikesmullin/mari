@@ -676,32 +676,31 @@ export class Repl {
       return [];
     }
     
-    // Get all rounds from scrollback
+    // Get only the most recent round from scrollback
     const rounds = getRounds();
+    const lastRound = rounds[rounds.length - 1];
     const matches = [];
     const seen = new Set(); // Deduplicate by captured value
+    
+    if (!lastRound) return [];
     
     // Helper to strip ANSI escape codes
     const stripAnsi = (str) => str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
     
-    // Process rounds in order (top to bottom)
-    for (const round of rounds) {
-      // Get all output lines from this round
-      const output = round.getOutput();
-      const lines = output.split('\n');
-      
-      for (const line of lines) {
-        // Strip ANSI codes before matching
-        const cleanLine = stripAnsi(line);
-        const match = cleanLine.match(regex);
-        if (match && match[1]) {
-          // match[1] is the first capture group
-          const value = match[1];
-          if (!seen.has(value)) {
-            seen.add(value);
-            // Store the cleaned line for display
-            matches.push({ value, line: cleanLine.trim() });
-          }
+    const output = lastRound.getOutput();
+    const lines = output.split('\n');
+    
+    for (const line of lines) {
+      // Strip ANSI codes before matching
+      const cleanLine = stripAnsi(line);
+      const match = cleanLine.match(regex);
+      if (match && match[1]) {
+        // match[1] is the first capture group
+        const value = match[1];
+        if (!seen.has(value)) {
+          seen.add(value);
+          // Store the cleaned line for display
+          matches.push({ value, line: cleanLine.trim() });
         }
       }
     }
