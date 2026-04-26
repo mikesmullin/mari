@@ -67,6 +67,24 @@ export function validateActivity(activity) {
       errors.push('"aliases" must be an object');
     }
   }
+
+  // Validate shell_prefix (optional, string)
+  if (activity.shell_prefix !== undefined && typeof activity.shell_prefix !== 'string') {
+    errors.push('"shell_prefix" must be a string');
+  }
+
+  // Validate shell_aliases (optional, object mapping strings to strings)
+  if (activity.shell_aliases !== undefined) {
+    if (typeof activity.shell_aliases !== 'object' || activity.shell_aliases === null || Array.isArray(activity.shell_aliases)) {
+      errors.push('"shell_aliases" must be an object');
+    } else {
+      for (const [alias, value] of Object.entries(activity.shell_aliases)) {
+        if (typeof value !== 'string') {
+          errors.push(`shell_aliases.${alias}: must be a string`);
+        }
+      }
+    }
+  }
   
   // Validate llm_context (optional, string)
   if (activity.llm_context !== undefined && typeof activity.llm_context !== 'string') {

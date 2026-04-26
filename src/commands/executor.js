@@ -258,6 +258,42 @@ export async function executeLlmShell(template, userInput, agent, options = {}) 
   return { ...result, command };
 }
 
+function resolveShellAlias(command, aliases) {
+  if (!command || !aliases || Object.keys(aliases).length === 0) {
+    return command;
+  }
+
+  const match = command.match(/^(\s*)([^\s]+)(.*)$/s);
+  if (!match) {
+    return command;
+  }
+
+  const [, leadingWhitespace, firstToken, remainder] = match;
+  const mapped = aliases[firstToken];
+
+  if (typeof mapped !== 'string' || mapped.length === 0) {
+    return command;
+  }
+
+  return `${leadingWhitespace}${mapped}${remainder}`;
+}
+
+async function buildShellCommand(command) {
+  const activityData = store.getCurrentActivity();
+  const activity = activityData?.activity || {};
+  const prefix = typeof activity.shell_prefix === 'string' ? activity.shell_prefix : '';
+  const aliases = activity.shell_aliases && typeof activity.shell_aliases === 'object'
+    ? activity.shell_aliases
+    : {};
+
+  const resolvedCommand = resolveShellAlias(command, aliases).trim();
+  if (!prefix) {
+    return resolvedCommand;
+  }
+
+  return resolvedCommand ? `${prefix} ${resolvedCommand}` : prefix;
+}
+
 /**
  * Execute a raw shell command (for SHELL mode)
  * @param {string} command - Raw shell command
@@ -265,6 +301,7 @@ export async function executeLlmShell(template, userInput, agent, options = {}) 
  * @returns {Promise<{code: number, stdout: string, stderr: string, command: string}>}
  */
 export async function executeShellDirect(command, options = {}) {
-  const result = await executeCapture(command, options);
-  return { ...result, command };
+  const resolvedCommand = await buildShellCommand(command);
+  const result = await executeCapture(resolvedCommand, options);
+  return { ...result, command: resolvedCommand };
 }

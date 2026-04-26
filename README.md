@@ -101,6 +101,19 @@ The prompt is sent to the command configured in `config.yml`. The scrollback buf
 ### SHELL Mode
 - Type a shell command, `Enter` to execute (stays in SHELL mode)
 - `Escape` - Exit to NORMAL mode
+- Optional activity-level `shell_prefix` prepends every typed command before execution
+- Optional activity-level `shell_aliases` expands the first typed token before prefixing
+
+Example:
+```yaml
+name: home
+shell_prefix: ~/launch.sh
+shell_aliases:
+  zen: zen-browser
+  code: visual-studio-code-insiders
+```
+
+With that config, typing `zen` in SHELL mode executes `~/launch.sh zen-browser`.
 
 ### WORD Mode
 - Type a word and press `Enter` to execute the matching command
@@ -159,6 +172,9 @@ Activities are defined in YAML files in the `activity/` directory:
 name: robin
 description: Stock & Options Trading
 color: "#6a994e"
+shell_prefix: ~/launch.sh
+shell_aliases:
+  hood: robinhood
 statusFormat: ${SYMBOL} ${EXP} $${STRIKE} ${TYPE} ${QTY} con @ $${PRICE}
 variables:
   QTY:
